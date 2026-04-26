@@ -7,7 +7,7 @@ This repository’s main notebook is **`Ferraro_Final_project.ipynb`**.
 ### Open and run (Google Colab)
 1. Navigate to `Ferraro_Final_project.ipynb` in this repository.
 2. Click **Open in Colab**.
-- Main Project: <a href="https://colab.research.google.com/github/jof-edu-smc/computational-creativity-ecs7022p/blob/final_in_colab/Ferraro_Final_Project.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>   
+- Main Project: <a href="https://colab.research.google.com/github/jof-edu-smc/drum-beat-generator/blob/main/Ferraro_Final_Project.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>   
  - Evaluation / Listening Survey: <a href="https://colab.research.google.com/github/jof-edu-smc/drum-beat-generator/blob/main/suvery.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 3. In Colab, select **Runtime → Change runtime type** and enable **GPU** (recommended).
 4. Run cells top-to-bottom using **Runtime → Run all**.
