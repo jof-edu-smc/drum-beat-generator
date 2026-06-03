@@ -1,7 +1,5 @@
 # Drum Beat Generator 
 
-NOTE: Waiting for academic grading to complete before publicly releasing code.
-
 ## Summary 
 This project is inspired by the common Casual Creators on the internet with an objective to experiment with new musical ideas. This system takes a few selectable user driven inputs based on genre, and the desired temporal length of the artifact. With those limited options, Genre Beat Generator composes a drumbeat within the desired number of musical “bars” based on the selected genre. In turn, new models can be trained on genre subsets of data. 
 
