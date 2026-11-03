@@ -1,7 +1,7 @@
 steps:
   # Build the container image using the Dockerfile in the 'app' directory
   - name: 'gcr.io/cloud-builders/docker'
-    dir: 'app'
+    dir: 'backend'
     args:
       - 'build'
       - '-t'
