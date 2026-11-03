@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f172a">
+    <title>Drum Beat Generator</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        padding: 1.5rem;
+        background:
+          radial-gradient(circle at top, rgba(99, 102, 241, 0.2), transparent 42rem),
+          #0f172a;
+      }
+
+      main {
+        width: min(100%, 36rem);
+        padding: clamp(2rem, 6vw, 4rem);
+        text-align: center;
+        background: rgba(30, 41, 59, 0.82);
+        border: 1px solid rgba(129, 140, 248, 0.28);
+        border-radius: 1rem;
+        box-shadow: 0 1.5rem 3rem rgba(2, 6, 23, 0.35);
+      }
+
+      .icon {
+        display: grid;
+        width: 3.5rem;
+        height: 3.5rem;
+        margin: 0 auto 1.5rem;
+        place-items: center;
+        color: #c7d2fe;
+        font-size: 1.5rem;
+        background: rgba(99, 102, 241, 0.2);
+        border: 1px solid rgba(129, 140, 248, 0.35);
+        border-radius: 50%;
+      }
+
+      h1 {
+        margin: 0 0 0.75rem;
+        color: #f8fafc;
+        font-size: clamp(1.5rem, 4vw, 2rem);
+      }
+
+      p {
+        margin: 0;
+        color: #94a3b8;
+        line-height: 1.6;
+      }
+
+      code {
+        color: #c7d2fe;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="icon" aria-hidden="true">♪</div>
+      <h1>Drum Beat Generator</h1>
+      <p>The requested page is not available. Return to the application or check the URL and try again.</p>
+      <p><code>404 · Route not found</code></p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,204 @@
+/* ==========================================================================
+   1. DYNAMIC COLOR SCHEME & THEME VARIABLES
+   ========================================================================== */
+
+:root {
+  /* --- Primary Theme Palette --- */
+  --bg-main: #0f172a;               /* Deep slate background */
+  --bg-card: rgba(30, 41, 59, 0.7);   /* Semi-transparent container background */
+  --bg-card-border: rgba(51, 65, 85, 0.6);
+  --bg-input: #020617;              /* Input field background */
+
+  /* --- Brand & Accent Colors --- */
+  --accent-primary: #6366f1;        /* Indigo primary accent */
+  --accent-primary-hover: #4f46e5;  /* Hover state */
+  --accent-glow: rgba(99, 102, 241, 0.35); /* Dynamic glowing effect */
+
+  /* --- Status & Audio Indicator Colors --- */
+  --color-success: #10b981;        /* Emerald green for ready/completed state */
+  --color-playing: #f59e0b;        /* Amber yellow for active MIDI playback */
+  --color-playing-glow: rgba(245, 158, 11, 0.4);
+
+  /* --- Typography Colors --- */
+  --text-main: #f8fafc;             /* Primary text */
+  --text-muted: #94a3b8;            /* Subtitles & labels */
+  --text-heading: #c7d2fe;          /* Header highlights */
+
+  /* --- UI Layout Specs --- */
+  --radius-lg: 1rem;
+  --radius-md: 0.5rem;
+  --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Optional Dynamic Theme Switcher (e.g., Light Mode Toggle) --- */
+[data-theme="light"] {
+  --bg-main: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-border: rgba(203, 213, 225, 0.8);
+  --bg-input: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-heading: #4338ca;
+}
+
+/* ==========================================================================
+   2. GLOBAL BASE STYLES
+   ========================================================================== */
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ==========================================================================
+   3. CARD CONTAINERS & DYNAMIC FORM UI
+   ========================================================================== */
+
+/* Main Container Card with Glassmorphism Effect */
+.card-container {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  transition: var(--transition-fast);
+}
+
+/* Form Controls & Inputs */
+.form-input,
+.form-select {
+  background-color: var(--bg-input);
+  border: 1px solid var(--bg-card-border);
+  color: var(--text-main);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1rem;
+  width: 100%;
+  font-size: 0.875rem;
+  transition: var(--transition-fast);
+}
+
+/* Dynamic Focus Glow on Inputs */
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Custom Range Slider Track & Thumb */
+input[type="range"] {
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   4. BUTTONS & INTERACTIVE STATES
+   ========================================================================== */
+
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: var(--transition-fast);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-primary-hover);
+  box-shadow: 0 0 15px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   5. AUDIO PLAYBACK & DYNAMIC STATE ANIMATIONS
+   ========================================================================== */
+
+/* Playback Control Box */
+.playback-panel {
+  background-color: var(--bg-input);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: var(--transition-fast);
+}
+
+/* Dynamic State: Playback Active Glow */
+.playback-panel.is-playing {
+  border-color: var(--color-playing);
+  box-shadow: 0 0 18px var(--color-playing-glow);
+}
+
+/* Dynamic Play/Stop Circular Button */
+.btn-play {
+  background-color: var(--color-success);
+  color: #ffffff;
+  border: none;
+  border-radius: 50%;
+  width: 3.25rem;
+  height: 3.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-play:hover {
+  transform: scale(1.05);
+}
+
+/* Dynamic color shift when playing */
+.btn-play.playing {
+  background-color: var(--color-playing);
+  animation: pulse-glow 1.5s infinite alternate;
+}
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 5px var(--color-playing-glow);
+  }
+  100% {
+    box-shadow: 0 0 20px var(--color-playing);
+  }
+}
+
+/* ==========================================================================
+   6. PARSED MIDI TRACK INSPECTOR (TERMINAL STYLE)
+   ========================================================================== */
+
+.midi-inspector {
+  background-color: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.midi-note-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.midi-note-row:hover {
+  background-color: rgba(99, 102, 241, 0.1); /* Dynamic highlight on hover */
+}

@@ -1,1 +1,28 @@
 .DS_Store
+/*/*/wandb
+.env
+
+# Node
+**/node_modules
+**/dist
+
+# Vite 
+**/.vite 
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+venv
+.env
+env
+
+# IDEs and OS
+.vscode
+.idea
+.DS_Store
+
+# Version Control
+.git
