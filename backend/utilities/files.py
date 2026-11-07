@@ -1,8 +1,32 @@
+import os
 import torch
 import numpy as np
 import pretty_midi # type: ignore
+from google.cloud import storage # type: ignore
 
-def save_gan_tensor_to_drums(tensor_input, output_path="gan_drums.mid", bpm=120):
+def get_weights_from_gcs(bucket_name, blob_name, local_path):
+    """
+    returns model weights from GCS bucket and saves them to local_path
+    Parameters:
+    - bucket_name: str, name of the GCS bucket
+    - blob_name: str, name of the blob (file) in the GCS bucket
+    - local_path: str, local file path where the blob will be saved
+    Returns: dictionary of model weights loaded from the local file
+    """
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    
+    
+    return None
+    
+
+def save_gan_tensor_to_drums(
+    tensor_input, 
+    output_path="gan_drums.mid", 
+    bpm=120, 
+    is_dev=False
+):
         """
         Converts GAN output into a Groove-compatible MIDI file of ANY length.
         Parameters:
@@ -44,5 +68,85 @@ def save_gan_tensor_to_drums(tensor_input, output_path="gan_drums.mid", bpm=120)
                     drum_track.notes.append(note)
 
         drum_midi.instruments.append(drum_track)
-        drum_midi.write(output_path)
+        if is_dev:
+            print(f"Saving MIDI file to: {output_path}")
+            drum_midi.write(output_path)
+        else: 
+            # Save the MIDI file to Google Cloud Storage
+            client = storage.Client()
+            bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")  # Ensure this environment variable is set
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(output_path)
+            blob.upload_from_string(drum_midi.write(), content_type='audio/midi')
         return output_path
+    
+def generate_gcs_url(file_path):
+    """
+    Generates a public URL for a file stored in Google Cloud Storage.
+    Assumes the file is already uploaded to GCS and is publicly accessible.
+    """
+    client = storage.Client()
+    bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")  # Ensure this environment variable is set
+    blob_name = file_path.split("/")[-1]  # Assuming the file name is the last part of the path
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+
+    if not blob.exists():
+        raise FileNotFoundError(f"The file {blob_name} does not exist in bucket {bucket_name}.")
+
+    return f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+
+def process_midi_to_tensor_list(midi_path, target_bpm=None, time_signature=None, stride=16, device=torch.device("cpu")):
+        """
+        Extracts overlapping 1-bar chunks from a MIDI file.
+        Parameters:
+        - midi_path: Path to the MIDI file to process.
+        - target_bpm: The BPM to use for quantization (if None, it will be estimated from the MIDI file).
+        - time_signature: The time signature to use for quantization (e.g., '4-4'). If None, it will be estimated from the MIDI file or defaulted to '4-4'.
+        - stride: Number of time steps to move for each new bar segment (default: 16, which corresponds to 1 bar at 16th note resolution).
+        - device: The PyTorch device to place the resulting tensors on (default: CPU).
+        Returns: A list of PyTorch tensors, each with shape (1, 128, 16).
+        """
+        
+        if target_bpm is None or time_signature is None:
+            raise ValueError("Both target_bpm and time_signature must be provided together for accurate slicing.")
+
+        try:
+            midi_data = pretty_midi.PrettyMIDI(midi_path)
+        except Exception as e:
+            return f"Error processing {midi_path}: {str(e)}"
+
+        tempo = target_bpm if target_bpm else midi_data.estimate_tempo()
+        step_duration = (60.0 / tempo) / float(time_signature[0])
+        max_end_time = 0
+        for instrument in midi_data.instruments:
+            if instrument.is_drum:
+                for note in instrument.notes:
+                    if note.end > max_end_time:
+                        max_end_time = note.end
+
+        total_steps = int(np.ceil(max_end_time / step_duration))
+        if total_steps < 16:
+            return []
+
+        master_matrix = np.zeros((128, total_steps), dtype=np.float32)
+        for instrument in midi_data.instruments:
+            if not instrument.is_drum:
+                continue
+            for note in instrument.notes:
+                start_bin = int(np.round(note.start / step_duration))
+                end_bin = int(np.round(note.end / step_duration))
+                if start_bin == end_bin:
+                    end_bin += 1
+                start_bin = min(max(0, start_bin), total_steps - 1)
+                end_bin = min(max(1, end_bin), total_steps)
+                for t in range(start_bin, end_bin):
+                    master_matrix[note.pitch, t] = 1.0
+
+        tensor_list = []
+        for start_idx in range(0, total_steps - 15, stride):
+            bar_slice = master_matrix[:, start_idx:start_idx + 16]
+            bar_tensor = torch.from_numpy(bar_slice).unsqueeze(0).to(device)
+            tensor_list.append(bar_tensor)
+
+        return tensor_list

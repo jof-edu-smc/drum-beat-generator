@@ -1,44 +1,72 @@
 import os
-import torch
-import wandb
-from torch import nn
-from tqdm import tqdm
+import torch # type: ignore
+import wandb # type: ignore
 import time
+from tqdm import tqdm # type: ignore
+import time
+from typing import Any
 from .losses import standard_gan_loss, feature_matching_loss
 
+def train(
+    generator, conditioner, discriminator,
+    train_dataloader, val_dataloader,
+    generator_optimizer, discriminator_optimizer,
+    opt, device, checkpoint_dir='checkpoints'
+):
+    
 
-#@title Training Function
-def train(generator, conditioner, discriminator,
-          train_dataloader, val_dataloader,
-          generator_optimizer, discriminator_optimizer,
-          opt, device, checkpoint_dir='checkpoints'):
+    
     best_val_g_fm = float('inf')
     train_start_time = time.time()
+    epochs = opt.epochs
 
-    run = wandb.init(
-        # Set the wandb entity where your project will be logged (generally your team name).
+    if len(train_dataloader) == 0:
+        raise ValueError("Training dataloader is empty; no training batches were produced.")
+    if len(val_dataloader) == 0:
+        raise ValueError("Validation dataloader is empty; no validation batches were produced.")
+
+    wandb_init = getattr(wandb, "init", None)
+    if not callable(wandb_init):
+        raise RuntimeError("The installed wandb package does not provide wandb.init().")
+
+    run: Any = wandb_init(
         entity="jof3",
-        # Set the wandb project where this run will be logged.
         project="drumbeat-generator",
-        # Track hyperparameters and run metadata.
+        mode=os.getenv("WANDB_MODE", "offline"),
         config={
-            "learning_rate": 0.02,
-            "architecture": "CNN",
-            "dataset": "CIFAR-100",
-            "epochs": 10,
+            "learning_rate": opt.lr,
+            "architecture": "GAN with Conditioner",
+            "dataset": "Apple Loops",
+            "epochs": epochs,
         },
     )
-    for epoch_num in range(opt.n_epochs):
-        batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{opt.n_epochs}", unit="batch", leave=False)
-        # for real_bar, condition_bar, real_chord, condition_chord, _ in batch_pbar:
-        for real, condition in batch_pbar:
-            condition_bar = condition['bar'].to(device=device, dtype=torch.float32)
-            real_bar = real['bar'].to(device=device, dtype=torch.float32)
-            # real_chord = real_chord.to(device=device, dtype=torch.float32)
-            # condition_chord = condition_chord.to(device=device, dtype=torch.float32)
+
+    D_loss_standard = torch.zeros((), device=device)
+    G_loss_bce = torch.zeros((), device=device)
+    G_loss_fm = torch.zeros((), device=device)
+ 
+    for epoch_num in range(epochs):
+        batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{epochs}", unit="batch", leave=False)
+        
+        previous_bars = {} 
+         
+        for item in batch_pbar:
+            real_bar = item["bar"].to(device=device, dtype=torch.float32)
+            genres = item["genre"]
+
+            condition_bar = torch.zeros_like(real_bar)
+
+            for index, genre in enumerate(genres):
+                if genre in previous_bars:
+                    condition_bar[index] = previous_bars[genre]
+                else:
+                    condition_bar[index] = 0
+
+            for index, genre in enumerate(genres):
+                previous_bars[genre] = real_bar[index].detach()
             batch_size = real_bar.size(0)
 
-            conditioned_bar = to_conditioner_input(condition_bar).to(device)  # Ensure shape is (batch_size, 1, 128, 16)
+            conditioned_bar = to_conditioner_input(condition_bar)
             chord_condition = torch.zeros(batch_size, 13, device=device, dtype=torch.float32)
 
             pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
@@ -111,13 +139,22 @@ def train(generator, conditioner, discriminator,
         val_steps = 0
 
         with torch.no_grad():
-            val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{opt.n_epochs}", unit="batch", leave=False)
-            # for val_real, val_condition, val_real_chord, val_condition_chord, _ in batch_pbar:
-            for val_real, val_condition in val_pbar:
-                val_condition_bar = val_condition["bar"].to(device=device, dtype=torch.float32)
-                val_real_bar = val_real["bar"].to(device=device, dtype=torch.float32)
+            val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{epochs}", unit="batch", leave=False)
+            pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
+            validation_previous_bars = {}
+            for val_item in val_pbar:
+                val_real_bar = val_item["bar"].to(device=device, dtype=torch.float32)
+                val_genres = val_item["genre"]
+                val_condition_bar = torch.zeros_like(val_real_bar)
 
-                val_conditioned_bar = to_conditioner_input(val_condition_bar).to(device)
+                for index, genre in enumerate(val_genres):
+                    if genre in validation_previous_bars:
+                        val_condition_bar[index] = validation_previous_bars[genre]
+
+                for index, genre in enumerate(val_genres):
+                    validation_previous_bars[genre] = val_real_bar[index].detach()
+
+                val_conditioned_bar = to_conditioner_input(val_condition_bar)
                 val_bsz = val_real_bar.size(0)
 
                 # Match training preprocessing
@@ -184,10 +221,11 @@ def train(generator, conditioner, discriminator,
         should_save = (epoch_num > 0 and epoch_num % 5 == 0) or (epoch_num > 0 and val_g_fm < best_val_g_fm)
 
         if should_save:
-            print(f"New best model found at epoch {epoch_num + 1} with val G_fm: {val_g_fm:.4f}. Saving checkpoint.")
+            datestamp = time.strftime("%Y%m%d-%H%M%S")
+            print(f"New best model found at epoch {epoch_num + 1} with val G_fm: {val_g_fm:.4f}. Saving checkpoint at {datestamp}.")
             if val_g_fm < best_val_g_fm:
                 best_val_g_fm = val_g_fm
-            torch.save(checkpoint, os.path.join(checkpoint_dir, f"best_{opt.genre}_model_epoch_{epoch_num + 1}_{fm_tag}.pth"))
+            torch.save(checkpoint, os.path.join(checkpoint_dir, f"{opt.genre}_e{epoch_num + 1}_{fm_tag}_{datestamp}.pth"))
 
 
         # --- Logging ---
@@ -205,6 +243,7 @@ def train(generator, conditioner, discriminator,
 
     train_end_time = time.time()
     total_train_time = train_end_time - train_start_time
+    run.finish()
     print(f"Total training time: {total_train_time:.2f} seconds ({total_train_time / 60:.2f} minutes)")
 
 def to_conditioner_input(x):

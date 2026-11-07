@@ -1,0 +1,22 @@
+steps:
+  # Build the container image using the Dockerfile in the 'app' directory
+  - name: 'gcr.io/cloud-builders/docker'
+    dir: 'backend'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training-$REPO_NAME:$COMMIT_SHA'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+
+# Store and push the built image to Container Registry / Artifact Registry
+images:
+  - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training-$REPO_NAME:$COMMIT_SHA'
+
+# Send build logs strictly to Google Cloud Logging
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+# Optional: timeout matching Cloud Build's default (10 minutes)
+timeout: '600s'

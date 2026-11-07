@@ -15,14 +15,15 @@ def to_conditioner_input(x):
             return x[:, -1, :, :].unsqueeze(1)
     raise ValueError(f"Unexpected conditioner input shape: {x.shape}")
 
-def generate_music(generator, conditioner, discriminator,
+def generate_music(generator, conditioner,
                    opt, device, NUM_BARS_TO_GENERATE=4,
-                   CHORD_PROGRESSION=None, MIDI_FILENAME="generated_sample",
+                   CHORD_PROGRESSION=None, 
                    checkpoint_path=None, creativity=1.0, custom_conditions=None):
     torch.seed()
     random.seed()
     np.random.seed()
 
+    print(f"Generating {NUM_BARS_TO_GENERATE} bars of music with creativity={creativity} on device {device}")
     if CHORD_PROGRESSION is not None and NUM_BARS_TO_GENERATE != len(CHORD_PROGRESSION):
         raise ValueError("Length of NUM_BARS_TO_GENERATE must match length of CHORD_PROGRESSION")
 
@@ -36,7 +37,6 @@ def generate_music(generator, conditioner, discriminator,
     checkpoint = torch.load(checkpoint_path, map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])
     conditioner.load_state_dict(checkpoint["conditioner_state_dict"])
-    discriminator.load_state_dict(checkpoint["discriminator_state_dict"])
 
     max_attempts = max(10, NUM_BARS_TO_GENERATE * 20)
     attempts = 0

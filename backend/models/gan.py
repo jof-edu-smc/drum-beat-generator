@@ -1,28 +1,6 @@
 import torch
 from torch import nn
 
-def weights_init_normal(m):
-    """
-    Applies a zero-centered normal distribution (std=0.02) to the weights
-    of Convolutional, Transposed Convolutional, and Linear layers.
-    """
-    classname = m.__class__.__name__
-
-    # Check if the layer is a Conv, ConvTranspose, or Linear layer
-    if classname.find('Conv') != -1 or classname.find('Linear') != -1:
-        # Initialize weights to mean=0.0, std=0.02
-        nn.init.normal_(m.weight.data, mean=0.0, std=0.02)
-
-        # If the layer has a bias, initialize it to 0
-        if m.bias is not None:
-            nn.init.constant_(m.bias.data, 0.0)
-
-    # For Batch Normalization layers, it is standard DCGAN practice
-    # to center the weights at 1.0 rather than 0.0, with the same std.
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, mean=1.0, std=0.02)
-        nn.init.constant_(m.bias.data, 0.0)
-
 class Generator(nn.Module):
     def __init__(self, latent_dim=100, chord_dim=13, min_pitch=48, max_pitch=72, w=16):
         super(Generator, self).__init__()
