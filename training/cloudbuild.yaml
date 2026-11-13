@@ -1,0 +1,34 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
+      - '-f'
+      - 'training/Dockerfile'
+      - '.'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'tag'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
+      - '${_IMAGE_URI}:latest'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_IMAGE_URI}:latest'
+images:
+  - '${_IMAGE_URI}:$COMMIT_SHA'
+  - '${_IMAGE_URI}:latest'
+substitutions:
+  _IMAGE_URI: 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training'
+
+# Send build logs strictly to Google Cloud Logging
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+# Optional: timeout matching Cloud Build's default (10 minutes)
+timeout: '600s'

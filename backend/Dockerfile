@@ -2,7 +2,9 @@
 # Build the Flask Backend & Final Image
 # ==========================================
 
-FROM python:3.14-slim AS backend-runner
+# Use an official PyTorch runtime image with CUDA support
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
 WORKDIR /app
 
 # Prevent Python from writing .pyc files and enable buffering
@@ -23,7 +25,7 @@ COPY models/ ./models/
 COPY utilities/ ./utilities/
 COPY index.html ./
 
-EXPOSE 8080
+EXPOSE 5001
 
 # Run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--threads", "8", "--timeout", "120", "app:app"]

@@ -1,5 +1,5 @@
-import torch
-from torch import nn
+import torch # type: ignore
+from torch import nn # type: ignore
 
 def weights_init_normal(m):
     """

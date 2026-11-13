@@ -1,7 +1,7 @@
 import os
-import torch
+import torch # type: ignore
 import random 
-import numpy as np
+import numpy as np # type: ignore
 
 def to_conditioner_input(x):
     # target: [B, 1, 128, 16]
@@ -15,14 +15,15 @@ def to_conditioner_input(x):
             return x[:, -1, :, :].unsqueeze(1)
     raise ValueError(f"Unexpected conditioner input shape: {x.shape}")
 
-def generate_music(generator, conditioner, discriminator,
+def generate_music(generator, conditioner,
                    opt, device, NUM_BARS_TO_GENERATE=4,
-                   CHORD_PROGRESSION=None, MIDI_FILENAME="generated_sample",
+                   CHORD_PROGRESSION=None, 
                    checkpoint_path=None, creativity=1.0, custom_conditions=None):
     torch.seed()
     random.seed()
     np.random.seed()
 
+    print(f"Generating {NUM_BARS_TO_GENERATE} bars of music with creativity={creativity} on device {device}")
     if CHORD_PROGRESSION is not None and NUM_BARS_TO_GENERATE != len(CHORD_PROGRESSION):
         raise ValueError("Length of NUM_BARS_TO_GENERATE must match length of CHORD_PROGRESSION")
 
@@ -36,7 +37,6 @@ def generate_music(generator, conditioner, discriminator,
     checkpoint = torch.load(checkpoint_path, map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])
     conditioner.load_state_dict(checkpoint["conditioner_state_dict"])
-    discriminator.load_state_dict(checkpoint["discriminator_state_dict"])
 
     max_attempts = max(10, NUM_BARS_TO_GENERATE * 20)
     attempts = 0
@@ -51,13 +51,13 @@ def generate_music(generator, conditioner, discriminator,
         pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
         pitch_h = opt.max_pitch - opt.min_pitch + 1
 
-        if custom_conditions is not None:
-            # Use provided tensors directly
-            idx = len(generated_bars)
-            condition_bar = custom_conditions[idx].to(device=device, dtype=torch.float32)
-            # If the tensor is already (1, 128, 16), slice it to the model's pitch range
+        if custom_conditions is not None and len(generated_bars) == 0:
+            # Use only the final source bar as the first iteration's condition.
+            condition_bar = custom_conditions[-1].to(device=device, dtype=torch.float32)
             if condition_bar.shape[-2] == 128:
                 condition_bar = condition_bar[:, pitch_slice, :]
+        elif custom_conditions is not None:
+            condition_bar = generated_bars[-1][pitch_slice, :].unsqueeze(0).to(device=device, dtype=torch.float32)
         else:
             if len(generated_bars) == 0:
                 condition_bar = torch.zeros((1, pitch_h, opt.w), device=device, dtype=torch.float32)
