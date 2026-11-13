@@ -5,7 +5,7 @@ google-cloud-storage==3.17.1
 google-auth==2.62.0
 google-api-core==2.43.0
 google-cloud-core==2.8.0
-numpy>=2.5.0
+numpy>=2.4.0,<2.5.0
 pandas==3.1.0
 python-dotenv==1.2.4
 gunicorn==23.0.0
