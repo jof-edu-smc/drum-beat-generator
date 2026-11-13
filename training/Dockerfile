@@ -2,28 +2,21 @@
 # Build the model training image
 # ==========================================
 
-FROM python:3.14-slim AS backend-runner
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 WORKDIR /app
 
 # Prevent Python from writing .pyc files and enable buffering
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV FLASK_ENV=production
-
 # Install Python dependencies
-COPY requirements.txt ./
+COPY training/requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt 
-RUN pip install --no-cache-dir gunicorn
 
-# Copy backend files and application data
+# Copy the training package and Vertex entrypoints.
+COPY training/vertex_train.py ./
+COPY training/datasets/ ./datasets/
+COPY training/models/ ./models/
+COPY training/utilities/ ./utilities/
 
-COPY app.py ./
-COPY models/ ./models/
-COPY utilities/ ./utilities/
-COPY datasets/ ./datasets/
-
-EXPOSE 8080
-
-# Run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+ENTRYPOINT ["python", "vertex_train.py"]

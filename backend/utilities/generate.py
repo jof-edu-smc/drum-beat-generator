@@ -1,7 +1,7 @@
 import os
-import torch
+import torch # type: ignore
 import random 
-import numpy as np
+import numpy as np # type: ignore
 
 def to_conditioner_input(x):
     # target: [B, 1, 128, 16]
@@ -51,13 +51,13 @@ def generate_music(generator, conditioner,
         pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
         pitch_h = opt.max_pitch - opt.min_pitch + 1
 
-        if custom_conditions is not None:
-            # Use provided tensors directly
-            idx = len(generated_bars)
-            condition_bar = custom_conditions[idx].to(device=device, dtype=torch.float32)
-            # If the tensor is already (1, 128, 16), slice it to the model's pitch range
+        if custom_conditions is not None and len(generated_bars) == 0:
+            # Use only the final source bar as the first iteration's condition.
+            condition_bar = custom_conditions[-1].to(device=device, dtype=torch.float32)
             if condition_bar.shape[-2] == 128:
                 condition_bar = condition_bar[:, pitch_slice, :]
+        elif custom_conditions is not None:
+            condition_bar = generated_bars[-1][pitch_slice, :].unsqueeze(0).to(device=device, dtype=torch.float32)
         else:
             if len(generated_bars) == 0:
                 condition_bar = torch.zeros((1, pitch_h, opt.w), device=device, dtype=torch.float32)

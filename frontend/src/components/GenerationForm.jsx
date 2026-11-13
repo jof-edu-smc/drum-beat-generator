@@ -1,9 +1,5 @@
 import { Sliders, Music, RefreshCw } from 'lucide-react';
-
-const GENRES = [
-  "All", "Funk", "Soul", "Hiphop", "Rock", "Jazz", 
-  "NewOrleans", "Latin", "Afrocuban", "Punk"
-];
+import { GENRES } from '../constants/drums';
 
 export default function GenerationForm({
   genre,
@@ -21,7 +17,7 @@ export default function GenerationForm({
   return (
     <form onSubmit={onSubmit} className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-6 shadow-xl space-y-6">
       <h2 className="text-xl font-semibold text-indigo-300 flex items-center gap-2">
-        <Sliders className="w-5 h-5" /> Generation Parameters
+        <Sliders className="w-5 h-5" /> Modify the parameters then generate a Drumbeat in MIDI
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -70,7 +66,7 @@ export default function GenerationForm({
           <input
             type="range"
             min="1"
-            max="32"
+            max="16"
             step="1"
             value={numBars}
             onChange={(e) => setNumBars(e.target.value)}

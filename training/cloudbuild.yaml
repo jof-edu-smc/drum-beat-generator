@@ -1,18 +1,30 @@
 steps:
-  # Build the container image using the Dockerfile in the 'app' directory
   - name: 'gcr.io/cloud-builders/docker'
-    dir: 'backend'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training-$REPO_NAME:$COMMIT_SHA'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
       - '-f'
-      - 'Dockerfile'
+      - 'training/Dockerfile'
       - '.'
-
-# Store and push the built image to Container Registry / Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'tag'
+      - '${_IMAGE_URI}:$COMMIT_SHA'
+      - '${_IMAGE_URI}:latest'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_IMAGE_URI}:latest'
 images:
-  - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training-$REPO_NAME:$COMMIT_SHA'
+  - '${_IMAGE_URI}:$COMMIT_SHA'
+  - '${_IMAGE_URI}:latest'
+substitutions:
+  _IMAGE_URI: 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training'
 
 # Send build logs strictly to Google Cloud Logging
 options:

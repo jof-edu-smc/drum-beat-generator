@@ -21,6 +21,31 @@ def get_weights_from_gcs(bucket_name, blob_name, local_path):
     return None
     
 
+def _tensor_input_to_matrix(tensor_input):
+        if isinstance(tensor_input, list):
+            matrices = [t.detach().squeeze().cpu().numpy() for t in tensor_input]
+            return np.concatenate(matrices, axis=1)
+        if torch.is_tensor(tensor_input):
+            t = tensor_input.detach().squeeze().cpu()
+            if t.ndim == 3:
+                return t.permute(1, 0, 2).reshape(128, -1).numpy()
+            if t.ndim == 2:
+                return t.numpy()
+            raise ValueError(f"Unexpected tensor shape: {tensor_input.shape}")
+        raise TypeError("Input must be a PyTorch tensor or a list of tensors.")
+
+
+def _save_midi(midi_data, output_path, is_dev):
+        if is_dev:
+            print(f"Saving MIDI file to: {output_path}")
+            midi_data.write(output_path)
+        else:
+            client = storage.Client()
+            bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")
+            blob = client.bucket(bucket_name).blob(output_path)
+            blob.upload_from_string(midi_data.write(), content_type='audio/midi')
+
+
 def save_gan_tensor_to_drums(
     tensor_input, 
     output_path="gan_drums.mid", 
@@ -35,19 +60,7 @@ def save_gan_tensor_to_drums(
         - A Python list of tensors: [tensor1, tensor2, ...]
         Returns: The file path to the saved MIDI file.
         """
-        if isinstance(tensor_input, list):
-            matrices = [t.detach().squeeze().cpu().numpy() for t in tensor_input]
-            matrix = np.concatenate(matrices, axis=1)
-        elif torch.is_tensor(tensor_input):
-            t = tensor_input.detach().squeeze().cpu()
-            if t.ndim == 3:
-                matrix = t.permute(1, 0, 2).reshape(128, -1).numpy()
-            elif t.ndim == 2:
-                matrix = t.numpy()
-            else:
-                raise ValueError(f"Unexpected tensor shape: {tensor_input.shape}")
-        else:
-            raise TypeError("Input must be a PyTorch tensor or a list of tensors.")
+        matrix = _tensor_input_to_matrix(tensor_input)
 
         num_pitches, total_steps = matrix.shape
         drum_midi = pretty_midi.PrettyMIDI(initial_tempo=bpm)
@@ -68,16 +81,48 @@ def save_gan_tensor_to_drums(
                     drum_track.notes.append(note)
 
         drum_midi.instruments.append(drum_track)
-        if is_dev:
-            print(f"Saving MIDI file to: {output_path}")
-            drum_midi.write(output_path)
-        else: 
-            # Save the MIDI file to Google Cloud Storage
-            client = storage.Client()
-            bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")  # Ensure this environment variable is set
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob(output_path)
-            blob.upload_from_string(drum_midi.write(), content_type='audio/midi')
+        _save_midi(drum_midi, output_path, is_dev)
+        return output_path
+
+
+def append_gan_tensor_to_drums(
+    base_midi_path,
+    tensor_input,
+    output_path="gan_drums.mid",
+    bpm=120,
+    is_dev=False
+):
+        """Append generated drum bars to an existing MIDI file."""
+        drum_midi = pretty_midi.PrettyMIDI(base_midi_path)
+        drum_track = next(
+            (instrument for instrument in drum_midi.instruments if instrument.is_drum),
+            None
+        )
+        if drum_track is None:
+            drum_track = pretty_midi.Instrument(program=0, is_drum=True, name="GAN Drum Kit")
+            drum_midi.instruments.append(drum_track)
+
+        matrix = _tensor_input_to_matrix(tensor_input)
+        step_duration = (60.0 / bpm) / 4.0
+        bar_duration = step_duration * 16
+        original_end = max(
+            (note.end for instrument in drum_midi.instruments for note in instrument.notes),
+            default=0.0
+        )
+        append_start = np.ceil(original_end / bar_duration) * bar_duration
+
+        for pitch in range(matrix.shape[0]):
+            for step in range(matrix.shape[1]):
+                if matrix[pitch, step] > 0.5:
+                    start_time = append_start + step * step_duration
+                    drum_track.notes.append(pretty_midi.Note(
+                        velocity=100,
+                        pitch=pitch,
+                        start=start_time,
+                        end=start_time + step_duration
+                    ))
+
+        _save_midi(drum_midi, output_path, is_dev)
         return output_path
     
 def generate_gcs_url(file_path):

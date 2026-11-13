@@ -4,7 +4,7 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from tqdm import tqdm
+from tqdm import tqdm # type: ignore
 
 apple_loop_dir = Path('/Library/Audio/Apple Loops')
 

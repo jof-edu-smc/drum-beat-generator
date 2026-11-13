@@ -28,11 +28,14 @@ class DrumDataset(Dataset):
                 raise ValueError(f"Metadata file {self.metadata_path} is empty or not properly formatted.")
         
         self.available_genres = self.metadata.get('list_of_genres', [])
+        metadata_directory = Path(self.metadata_path).resolve().parent
         self.dataset = [] 
         self.invalid_dataset = []  # To keep track of invalid MIDI files
         
         for item in tqdm(self.metadata['files'], desc="Processing MIDI files", unit="file"):
             midi_path = item['midi_path']
+            if not os.path.isabs(midi_path):
+                midi_path = str(metadata_directory / midi_path)
             if genre_filter != 'all' and item['genre'] != genre_filter:
                 continue
             

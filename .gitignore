@@ -1,11 +1,15 @@
 # Files and Folders
 .DS_Store
+**/audio
 **/wandb
 **/weights
 **.mid
 **/Apple
 **/metadata.json
 **/checkpoints
+**.pdf
+**/documentation
+
 
 # Node
 **/node_modules

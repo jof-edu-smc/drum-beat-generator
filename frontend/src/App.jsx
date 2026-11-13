@@ -1,12 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Midi } from '@tonejs/midi';
 import * as Tone from 'tone';
 import AppHeader from './components/AppHeader';
+import AuthPanel from './components/AuthPanel';
 import GenerationForm from './components/GenerationForm';
 import MidiEditor from './components/MidiEditor';
 import { DRUM_SAMPLES, PRESET_DRUMS } from './constants/drums';
 
 const API_BASE_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const MIDI_SOURCE_BPM = 120;
 
 export default function App() {
   const [view, setView] = useState('form');
@@ -20,18 +22,41 @@ export default function App() {
   const [midiUrl, setMidiUrl] = useState('');
   const [midiData, setMidiData] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackPosition, setPlaybackPosition] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
+  const [authToken, setAuthToken] = useState('');
+  const [user, setUser] = useState(null);
 
   const synthsRef = useRef([]);
+  const transportStopRef = useRef(null);
 
   useEffect(() => {
     Tone.Transport.bpm.value = bpm;
   }, [bpm]);
 
+  useEffect(() => {
+    if (!isPlaying || !midiData?.duration) {
+      return undefined;
+    }
+
+    let animationFrame;
+    const updatePlaybackPosition = () => {
+      setPlaybackPosition(Math.min(Tone.Transport.seconds / midiData.duration, 1));
+      animationFrame = requestAnimationFrame(updatePlaybackPosition);
+    };
+    animationFrame = requestAnimationFrame(updatePlaybackPosition);
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isPlaying, midiData]);
+
   const handleGenerate = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
+    if (!authToken) {
+      setStatusMessage('Sign in with Google before generating a beat.');
+      return;
+    }
     setLoading(true);
-    setStatusMessage('Running model inference & uploading to GCS...');
+    setStatusMessage('Running model inference and prepping MIDI File for download...');
 
     try {
       const cleanedFilename = midiFilename.replace(/\s+/g, '_').trim();
@@ -45,7 +70,10 @@ export default function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
         body: JSON.stringify(payload),
       });
 
@@ -72,9 +100,26 @@ export default function App() {
     }
   };
 
+  const handleAuthenticated = useCallback((token, authenticatedUser) => {
+    setAuthToken(token);
+    setUser(authenticatedUser);
+  }, []);
+
+  const handleSignedOut = useCallback(() => {
+    setAuthToken('');
+    setUser(null);
+  }, []);
+
+  const onBackToParams = () => {
+    setView('form');
+    setMidiData(null);
+    setMidiUrl('');
+  }
+
   const loadMidiFromUrl = async (url) => {
     try {
-      const midi = await Midi.fromUrl(url);
+      const separator = url.includes('?') ? '&' : '?';
+      const midi = await Midi.fromUrl(`${url}${separator}v=${Date.now()}`);
       setMidiData(midi);
     } catch (e) {
       console.warn('Could not fetch remote MIDI, creating template.', e);
@@ -103,56 +148,92 @@ export default function App() {
     setMidiData(updatedMidi);
   };
 
+  const handleUpdateNote = (trackIndex, noteIndex, updates) => {
+    if (!midiData?.tracks[trackIndex]?.notes[noteIndex]) return;
+
+    const updatedMidi = midiData.clone();
+    Object.assign(updatedMidi.tracks[trackIndex].notes[noteIndex], updates);
+    setMidiData(updatedMidi);
+  };
+
   const togglePlay = async () => {
     await Tone.start();
+
     if (isPlaying) {
+      // If already playing, stop the transport and dispose of synths
       Tone.Transport.stop();
       Tone.Transport.cancel();
-      setIsPlaying(false);
-      synthsRef.current.forEach(synth => synth.dispose());
-      synthsRef.current = [];
+      transportStopRef.current?.();
     } else {
+
       if (!midiData || midiData.tracks.length === 0) {
-        alert("No MIDI notes available to play.");
+        console.error("No MIDI notes available to play.");
         return;
       }
 
       setIsPlaying(true);
       Tone.Transport.cancel();
+      const handleTransportStop = () => {
+        Tone.Transport.off('stop', handleTransportStop);
+        transportStopRef.current = null;
 
-      const sampler = new Tone.Sampler({
-        urls: DRUM_SAMPLES,
-        baseUrl: '/constants/',
-        onload: () => {
-          console.log('Sampler loaded successfully.');
-        }
-      }).toDestination();
+        setIsPlaying(false);
+        setPlaybackPosition(0);
+        synthsRef.current.forEach(synth => synth.dispose());
+        synthsRef.current = [];
+      };
+      transportStopRef.current = handleTransportStop;
+      Tone.Transport.on('stop', handleTransportStop);
+
+      const sampler = new Tone.Sampler({ urls: DRUM_SAMPLES }).toDestination();
       synthsRef.current.push(sampler);
 
-      await Tone.loaded();
+      try {
+        await Tone.loaded();
+      } catch (error) {
+        Tone.Transport.cancel();
+        Tone.Transport.off('stop', handleTransportStop);
+        transportStopRef.current = null;
+        sampler.dispose();
+        synthsRef.current = [];
+        setIsPlaying(false);
+        console.error('Unable to load drum samples.', error);
+        return;
+      }
       
       midiData.tracks.forEach(track => {
         track.notes.forEach(note => {
+          if (!Object.hasOwn(DRUM_SAMPLES, note.name)) {
+            console.warn(`Skipping unsupported drum note: ${note.name} (MIDI ${note.midi})`);
+            return;
+          }
+
+          const beatPosition = note.time * 2;
+          const bar = Math.floor(beatPosition / 4);
+          const beat = Math.floor(beatPosition % 4);
+          const sixteenth = Math.round((beatPosition % 1) * 4);
+
           Tone.Transport.schedule((time) => {
             const preset = PRESET_DRUMS[note.name];
             if (preset) {
               sampler.attack = preset.envelope.attack;
               sampler.release = preset.envelope.release;
             }
-            sampler.triggerAttackRelease(note.name, note.duration, time, note.velocity);
-          }, note.time);
+            sampler.triggerAttackRelease(
+              note.name,
+              note.duration * (120 / bpm),
+              time,
+              note.velocity
+            );
+          }, `${bar}:${beat}:${sixteenth}`);
         });
       });
 
-      Tone.Transport.start();
-      
       const duration = midiData.duration + 1;
-      setTimeout(() => {
-        if (isPlaying) {
-          setIsPlaying(false);
-          Tone.Transport.stop();
-        }
-      }, duration * 1000);
+      Tone.Transport.scheduleOnce(() => {
+        Tone.Transport.stop();
+      }, duration * (MIDI_SOURCE_BPM / bpm));
+      Tone.Transport.start();
     }
   };
 
@@ -177,9 +258,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center p-6">
-      <AppHeader />
+      <AppHeader authControl={(
+        <AuthPanel
+          onAuthenticated={handleAuthenticated}
+          onSignedOut={handleSignedOut}
+          user={user}
+        />
+      )} />
 
-      <main className="w-full max-w-4xl">
+      <main className={`w-full ${view === 'editor' ? 'editor-main' : 'max-w-4xl'}`}>
         {view === 'form' ? (
           <GenerationForm
             genre={genre}
@@ -200,12 +287,14 @@ export default function App() {
             midiData={midiData}
             onDeleteNote={handleDeleteNote}
             onAddNote={handleAddNote}
+            onUpdateNote={handleUpdateNote}
             bpm={bpm}
             onBpmChange={setBpm}
             isPlaying={isPlaying}
+            playbackPosition={playbackPosition}
             togglePlay={togglePlay}
             handleDownload={handleDownload}
-            onBackToParams={() => setView('form')}
+            onBackToParams={onBackToParams}
             creativity={creativity}
             setCreativity={setCreativity}
             numBars={numBars}

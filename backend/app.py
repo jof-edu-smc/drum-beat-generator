@@ -10,9 +10,17 @@ import urllib.request
 from collections import defaultdict, deque
 from pathlib import Path
 from dotenv import load_dotenv # type: ignore
+from google.auth.transport import requests as google_requests # type: ignore
+from google.oauth2 import id_token as google_id_token # type: ignore
 from models.gan import Generator, Conditioner
 from utilities.generate import generate_music
-from utilities.files import save_gan_tensor_to_drums, generate_gcs_url, get_weights_from_gcs, process_midi_to_tensor_list
+from utilities.files import (
+    append_gan_tensor_to_drums,
+    save_gan_tensor_to_drums,
+    generate_gcs_url,
+    get_weights_from_gcs,
+    process_midi_to_tensor_list,
+)
 from flask import Flask, Response, abort, jsonify, request, send_from_directory, url_for # type: ignore
 from flask_cors import CORS # type: ignore
 
@@ -21,7 +29,8 @@ pp = pprint.PrettyPrinter(indent=4)
 load_dotenv()
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = str(APP_DIR)
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("DRUMBEAT_API_KEY") or os.getenv("API_KEY")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GENERATION_SERVICE_URL = os.getenv(
     "GENERATION_SERVICE_URL",
     "http://127.0.0.1:5001/api/internal/generate",
@@ -46,6 +55,27 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 CORS(app, resources={r"/api/*": {"origins": [origin.strip() for origin in allowed_origins]}})
+
+
+def authenticate_user():
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return jsonify({"error": "Google authentication is required."}), 401
+    if not GOOGLE_CLIENT_ID:
+        app.logger.error("GOOGLE_CLIENT_ID is not configured; refusing user authentication")
+        return jsonify({"error": "User authentication is not configured."}), 503
+
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        google_id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+        )
+    except ValueError:
+        app.logger.warning("Invalid Google authentication token")
+        return jsonify({"error": "Invalid Google authentication token."}), 401
+    return None
 
 
 @app.before_request
@@ -96,6 +126,9 @@ def health():
 @app.route("/api/generate", methods=["POST"])
 def frontend_generate():
     """Forward browser requests without exposing the service API key."""
+    authentication_error = authenticate_user()
+    if authentication_error:
+        return authentication_error
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify({"error": "A JSON object is required."}), 400
@@ -163,17 +196,27 @@ def generate():
         generator.to(DEVICE)
         conditioner.to(DEVICE)
         
+        source_midi_path = None
         if midi_url:
-            with tempfile.NamedTemporaryFile(suffix=".mid") as temp_file:
-                urllib.request.urlretrieve(midi_url, temp_file.name)
+            with tempfile.NamedTemporaryFile(suffix=".mid", delete=False) as temp_file:
+                source_midi_path = temp_file.name
+            try:
+                urllib.request.urlretrieve(midi_url, source_midi_path)
                 custom_conditions = process_midi_to_tensor_list(
-                    midi_path=temp_file.name,
+                    midi_path=source_midi_path,
                     target_bpm=120,
                     time_signature=(4, 4),
                     stride=W,
                     device=DEVICE,
                 )
-        else: 
+                if not isinstance(custom_conditions, list) or not custom_conditions:
+                    raise ValueError("The conditioning MIDI does not contain a complete bar.")
+                print("Applying the final bar as a custom condition from MIDI file:", midi_url)
+            except (urllib.error.URLError, OSError, ValueError):
+                if source_midi_path and os.path.exists(source_midi_path):
+                    os.unlink(source_midi_path)
+                raise
+        else:
             custom_conditions = None
         
         generated_bars = generate_music(
@@ -200,12 +243,23 @@ def generate():
             if DEV
             else f"{midi_filename}.mid"
         )
-        file_location = save_gan_tensor_to_drums(
-            tensor_input=generated_bars,
-            output_path=output_path,
-            bpm=120, 
-            is_dev=DEV
-        )
+        if source_midi_path:
+            file_location = append_gan_tensor_to_drums(
+                base_midi_path=source_midi_path,
+                tensor_input=generated_bars,
+                output_path=output_path,
+                bpm=120,
+                is_dev=DEV,
+            )
+        else:
+            file_location = save_gan_tensor_to_drums(
+                tensor_input=generated_bars,
+                output_path=output_path,
+                bpm=120,
+                is_dev=DEV,
+            )
+        if source_midi_path and os.path.exists(source_midi_path):
+            os.unlink(source_midi_path)
         if DEV:
             return jsonify({
                 "message": f"Generated a bar of music at {len(generated_bars)} in the location: {file_location}",

@@ -1,28 +1,30 @@
-import { Play, Square, Download, RefreshCw, CheckCircle, ArrowLeft } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  MousePointerClick,
+  Move,
+  Play,
+  Square
+} from 'lucide-react';
+import { DRUM_LANES } from '../constants/drums';
 
-const DRUM_LANES = [
-  { name: 'Ride Bell', midi: 53 },
-  { name: 'Ride Bow', midi: 51 },
-  { name: 'Crash 2', midi: 57 },
-  { name: 'Crash 1', midi: 49 },
-  { name: 'HH Pedal', midi: 44 },
-  { name: 'HH Closed', midi: 42 },
-  { name: 'HH Open', midi: 46 },
-  { name: 'Tom 3', midi: 45 },
-  { name: 'Tom 2', midi: 47 },
-  { name: 'Tom 1', midi: 50 },
-  { name: 'Snare', midi: 38 },
-  { name: 'Kick', midi: 36 }
-];
+const SOURCE_BPM = 120;
+const SIXTEENTH_NOTE = 60 / SOURCE_BPM / 4;
+
+const snapToGrid = (time) => Math.max(0, Math.round(time / SIXTEENTH_NOTE) * SIXTEENTH_NOTE);
 
 export default function MidiEditor({
   midiFilename,
   midiData,
   onDeleteNote,
   onAddNote,
+  onUpdateNote,
   bpm,
   onBpmChange,
   isPlaying,
+  playbackPosition,
   togglePlay,
   handleDownload,
   onBackToParams,
@@ -33,181 +35,264 @@ export default function MidiEditor({
   handleGenerate,
   loading
 }) {
-  const notes = midiData?.tracks.flatMap((track, trackIndex) =>
-    track.notes.map((note, noteIndex) => ({ note, noteIndex, trackIndex }))
-  ) ?? [];
+  const [selectedNote, setSelectedNote] = useState(null);
+  const [extensionWarning, setExtensionWarning] = useState('');
+  const dragRef = useRef(null);
+  const notes = useMemo(() => (
+    midiData?.tracks.flatMap((track, trackIndex) =>
+      track.notes.map((note, noteIndex) => ({ note, noteIndex, trackIndex }))
+    ) ?? []
+  ), [midiData]);
   const noteEnd = notes.reduce(
     (latest, { note }) => Math.max(latest, note.time + note.duration),
     0
   );
   const maxDuration = Math.max(midiData?.duration ?? 0, noteEnd, 4);
+  const existingBars = Math.max(1, Math.ceil((midiData?.duration ?? 0) / 2));
+  const selected = selectedNote
+    ? midiData?.tracks[selectedNote.trackIndex]?.notes[selectedNote.noteIndex]
+    : null;
+
+  const laneNotes = useMemo(() => (
+    DRUM_LANES.map((lane) => ({
+      ...lane,
+      notes: notes.filter(({ note }) => note.midi === lane.midi)
+    }))
+  ), [notes]);
+
+  const beginNoteDrag = (event, noteInfo) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = event.currentTarget.parentElement.getBoundingClientRect();
+    const edgeSize = Math.min(8, event.currentTarget.offsetWidth / 3);
+    const localX = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    dragRef.current = {
+      ...noteInfo,
+      startX: event.clientX,
+      initialTime: noteInfo.note.time,
+      initialDuration: noteInfo.note.duration,
+      pixelsPerSecond: bounds.width / maxDuration,
+      mode: localX <= edgeSize ? 'resize-start' : (
+        localX >= event.currentTarget.offsetWidth - edgeSize ? 'resize-end' : 'move'
+      )
+    };
+    setSelectedNote(noteInfo);
+  };
+
+  const updateDraggedNote = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const delta = (event.clientX - drag.startX) / drag.pixelsPerSecond;
+
+    if (drag.mode === 'resize-start') {
+      const end = drag.initialTime + drag.initialDuration;
+      const time = Math.min(snapToGrid(drag.initialTime + delta), end - SIXTEENTH_NOTE);
+      onUpdateNote(drag.trackIndex, drag.noteIndex, {
+        time,
+        duration: end - time
+      });
+    } else if (drag.mode === 'resize-end') {
+      const duration = Math.max(
+        SIXTEENTH_NOTE,
+        snapToGrid(drag.initialDuration + delta)
+      );
+      onUpdateNote(drag.trackIndex, drag.noteIndex, { duration });
+    } else {
+      const targetTrack = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest('.midi-roll__track');
+      const targetMidi = targetTrack?.dataset.midi;
+      onUpdateNote(drag.trackIndex, drag.noteIndex, {
+        time: Math.min(snapToGrid(drag.initialTime + delta), maxDuration - SIXTEENTH_NOTE),
+        ...(targetMidi ? { midi: Number(targetMidi) } : {})
+      });
+    }
+  };
+
+  const finishNoteDrag = () => {
+    dragRef.current = null;
+  };
+
+  const handleExtendGenerate = () => {
+    const requestedBars = Number(numBars);
+    if (existingBars + requestedBars > 16) {
+      const availableBars = 16 - existingBars;
+      setExtensionWarning(
+        availableBars > 0
+          ? `This beat already contains ${existingBars} bars. Lower Number of Bars to ${availableBars} or fewer before extending.`
+          : 'This beat already contains 16 bars. Start over to generate a new beat.'
+      );
+      return;
+    }
+
+    setExtensionWarning('');
+    handleGenerate();
+  };
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-6 shadow-xl space-y-6">
-      
-      {/* Top Action Header */}
-      <div className="flex items-center justify-between border-b border-slate-700 pb-4">
+    <div className="midi-editor bg-slate-800/50 border border-slate-700/60 rounded-xl p-3 shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-700 p-3">
         <div>
-          <h2 className="text-xl font-semibold text-emerald-400 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5" /> Generated: {midiFilename}.mid
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">File Ready for Download.</p>
+          <button onClick={onBackToParams} className="btn-secondary" type="button">
+            <ArrowLeft className="w-4 h-4" /> Start Over
+          </button>
         </div>
-        <button
-          onClick={onBackToParams}
-          className="bg-slate-700 hover:bg-slate-600 text-sm text-slate-200 font-medium px-4 py-2 rounded-lg transition flex items-center gap-2 shadow"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Parameters
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleDownload} className="btn-primary" type="button">
+            <Download className="w-4 h-4" /> {midiFilename}.mid
+          </button>
+        </div>
       </div>
 
-      {/* Piano Roll Grid Inspector */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-300">MIDI Track Piano Roll Inspector</h3>
-        <div className="midi-roll">
+      <section className="midi-editor__iteration">
+        <div>
+          <label htmlFor="editor-creativity">Adjust Creativity: {creativity}</label>
+          <input
+            id="editor-creativity"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={creativity}
+            onChange={(event) => setCreativity(event.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="editor-bars">Adjust Number of Bars: {numBars}</label>
+          <input
+            id="editor-bars"
+            type="range"
+            min="1"
+            max="16"
+            step="1"
+            value={numBars}
+            onChange={(event) => setNumBars(event.target.value)}
+          />
+        </div>
+      </section>
+
+      <section className="midi-editor__roll-section">
+        <div className="midi-editor__instructions" role="note">
+          <div><MousePointerClick /> <span><strong>Right-click</strong> a lane to add a note</span></div>
+          <div><MousePointerClick /> <span><strong>Double-click</strong> a note to delete it</span></div>
+          <div><Move /> <span><strong>Drag</strong> notes to move, resize, or change lanes</span></div>
+        </div>
+        {extensionWarning && (
+          <div className="midi-editor__warning" role="alert">{extensionWarning}</div>
+        )}
+        <div className="midi-roll midi-roll--editor">
           <div className="midi-roll__timeline">
-            {DRUM_LANES.map((lane, laneIdx) => (
-              <div key={laneIdx} className="midi-roll__lane">
-                <span className="midi-roll__label">
-                  {lane.name}
+            {laneNotes.map((lane, laneIndex) => (
+              <div
+                key={lane.name}
+                className="midi-roll__lane midi-roll__lane--rainbow"
+                style={{ '--lane-hue': `${laneIndex * 17}` }}
+              >
+                <span className="midi-roll__label" title={`${lane.instrument} (${lane.name})`}>
+                  {lane.instrument}
                 </span>
-                
                 <div
                   className="midi-roll__track"
-                  title={`Add ${lane.name} at the clicked time`}
-                  onClick={(event) => {
+                  data-midi={lane.midi}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
                     const bounds = event.currentTarget.getBoundingClientRect();
-                    const position = (event.clientX - bounds.left) / bounds.width;
-                    const time = Math.min(Math.max(position * maxDuration, 0), maxDuration);
-                    onAddNote(lane.midi, time);
+                    const time = snapToGrid(
+                      ((event.clientX - bounds.left) / bounds.width) * maxDuration
+                    );
+                    onAddNote(lane.midi, Math.min(time, maxDuration - SIXTEENTH_NOTE));
                   }}
                 >
-                  {notes
-                    .filter(({ note }) => note.midi === lane.midi)
-                    .map(({ note, noteIndex, trackIndex }) => {
-                      const leftPercent = (note.time / maxDuration) * 100;
-                      const widthPercent = Math.max(
-                        Math.min((note.duration / maxDuration) * 100, 100 - leftPercent),
-                        0.5
-                      );
+                  {isPlaying && (
+                    <span
+                      className="midi-roll__play-cursor"
+                      style={{ left: `${playbackPosition * 100}%` }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {lane.notes.map((noteInfo) => {
+                    const leftPercent = (noteInfo.note.time / maxDuration) * 100;
+                    const widthPercent = Math.max(
+                      Math.min((noteInfo.note.duration / maxDuration) * 100, 100 - leftPercent),
+                      0.6
+                    );
+                    const isSelected = selectedNote?.trackIndex === noteInfo.trackIndex
+                      && selectedNote.noteIndex === noteInfo.noteIndex;
 
-                        return (
-                          <button
-                            type="button"
-                            key={`${trackIndex}-${noteIndex}`}
-                            title={`${note.name} | Time: ${note.time.toFixed(2)}s. Double-click to delete.`}
-                            aria-label={`Delete ${note.name} at ${note.time.toFixed(2)} seconds`}
-                            onClick={(event) => event.stopPropagation()}
-                            onDoubleClick={() => onDeleteNote(trackIndex, noteIndex)}
-                            className="midi-roll__note"
-                            style={{
-                              left: `${Math.min(Math.max(leftPercent, 0), 100)}%`,
-                              width: `${widthPercent}%`
-                            }}
-                          />
-                        );
-                    })
-                  }
+                    return (
+                      <button
+                        type="button"
+                        key={`${noteInfo.trackIndex}-${noteInfo.noteIndex}-${noteInfo.note.time}`}
+                        title={`${noteInfo.note.name} · velocity ${Math.round(noteInfo.note.velocity * 127)}`}
+                        className={`midi-roll__note ${isSelected ? 'midi-roll__note--selected' : ''}`}
+                        style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedNote(noteInfo);
+                        }}
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteNote(noteInfo.trackIndex, noteInfo.noteIndex);
+                          setSelectedNote(null);
+                        }}
+                        onPointerDown={(event) => beginNoteDrag(event, noteInfo)}
+                        onPointerMove={updateDraggedNote}
+                        onPointerUp={finishNoteDrag}
+                        onContextMenu={(event) => event.stopPropagation()}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-        <p className="text-[11px] text-slate-500 italic">Showing Piano roll over a {maxDuration.toFixed(1)} second window.</p>
-      </div>
-
-      {/* Tempo Control */}
-      <div className="bpm-control">
-        <div className="bpm-control__header">
-          <label htmlFor="bpm-slider">Tempo</label>
-          <output htmlFor="bpm-slider">{bpm} BPM</output>
-        </div>
-        <input
-          id="bpm-slider"
-          type="range"
-          min="40"
-          max="240"
-          step="1"
-          value={bpm}
-          onChange={(event) => onBpmChange(Number(event.target.value))}
-          aria-label="Playback tempo in beats per minute"
-        />
-        <div className="bpm-control__scale" aria-hidden="true">
-          <span>40</span>
-          <span>140</span>
-          <span>240</span>
-        </div>
-      </div>
-
-      {/* Padded Audio Controls & Download Panel (Below Inspector) */}
-      <div className="bg-slate-900 border border-slate-700/80 rounded-xl p-5 mt-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-inner">
-        <div className="flex items-center space-x-4">
           <button
-            onClick={togglePlay}
-            className={`p-4 rounded-full transition flex items-center justify-center ${
-              isPlaying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
-            } text-white shadow-md`}
+            type="button"
+            className="extend-generate"
+            onClick={handleExtendGenerate}
+            disabled={loading}
+            title="Extend the generated beat"
+            aria-label="Extend the generated beat"
           >
-            {isPlaying ? <Square className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
-          </button>
-          <div>
-            <h4 className="font-medium text-slate-200">Browser Audio Synthesizer</h4>
-            <p className="text-xs text-slate-400">
-              {isPlaying ? 'Playing piano roll sequence...' : 'Click play to audition generated MIDI notes.'}
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <button
-            onClick={handleDownload}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg transition flex items-center space-x-2"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download MIDI File</span>
+            <ArrowRight />
           </button>
         </div>
-      </div>
+      </section>
 
-      {/* Iteration Control Box */}
-      <div className="border-t border-slate-700 pt-6">
-        <h3 className="text-sm font-semibold text-slate-200 mb-4">Iterate & Re-trigger Generation Sequence</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Adjust Creativity: {creativity}</label>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={creativity}
-              onChange={(e) => setCreativity(e.target.value)}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Adjust Number of Bars: {numBars}</label>
-            <input
-              type="range"
-              min="1"
-              max="32"
-              step="1"
-              value={numBars}
-              onChange={(e) => setNumBars(e.target.value)}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
-          </div>
-        </div>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center space-x-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          <span>Re-run Generation with New Parameters</span>
+      {selected && (
+        <section className="velocity-control">
+          <label htmlFor="velocity-slider">
+            Selected velocity: {Math.round(selected.velocity * 127)}
+          </label>
+          <input
+            id="velocity-slider"
+            type="range"
+            min="0"
+            max="127"
+            value={Math.round(selected.velocity * 127)}
+            onChange={(event) => onUpdateNote(
+              selectedNote.trackIndex,
+              selectedNote.noteIndex,
+              { velocity: Number(event.target.value) / 127 }
+            )}
+          />
+        </section>
+      )}
+
+      <div className="playback-controls bg-slate-900 border border-slate-700/80 rounded-xl p-5 flex items-center gap-4">
+        <button onClick={togglePlay} className={`p-4 rounded-full ${isPlaying ? 'bg-amber-600' : 'bg-emerald-600'} text-white`} type="button">
+          {isPlaying ? <Square className="w-6 h-6" /> : <Play className="w-6 h-6" />}
         </button>
-      </div>
+        <section className="bpm-control bpm-control--compact">
+          <div className="bpm-control__header">
+            <label htmlFor="bpm-slider">Tempo</label>
+            <output htmlFor="bpm-slider">{bpm} BPM</output>
+          </div>
+          <input id="bpm-slider" type="range" min="40" max="240" value={bpm} onChange={(event) => onBpmChange(Number(event.target.value))} />
+          <div className="bpm-control__scale" aria-hidden="true"><span>40</span><span>140</span><span>240</span></div>
+        </section>
 
+      </div>
     </div>
   );
 }

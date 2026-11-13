@@ -1,16 +1,37 @@
 steps:
-  # Build the container image using the Dockerfile in the 'app' directory
+  # 1. Build the container image using the Dockerfile in the 'frontend' directory with Vite build-time variables
   - name: 'gcr.io/cloud-builders/docker'
     dir: 'frontend'
     args:
       - 'build'
+      - '--build-arg'
+      - 'VITE_BACKEND_URL=$_VITE_BACKEND_URL'
+      - '--build-arg'
+      - 'VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID'
       - '-t'
       - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
       - '-f'
       - 'Dockerfile'
       - '.'
 
-# Store and push the built image to Container Registry / Artifact Registry
+  # 2. Push the built image to Container / Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
+
+  # 3. Deploy the static frontend container to Cloud Run as a public web service
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'frontend-service'
+      - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--allow-unauthenticated'
+
+# Store and push the built image reference
 images:
   - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
 
@@ -18,5 +39,5 @@ images:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-# Optional: timeout matching Cloud Build's default (10 minutes)
+# Build execution timeout
 timeout: '600s'
