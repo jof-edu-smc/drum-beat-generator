@@ -23,6 +23,30 @@ from utilities.train import train
 
 LOGGER = logging.getLogger(__name__)
 
+# Configuration from environment variables
+BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "your-gan-model-bucket")
+LOCAL_CHECKPOINT_DIR = "/tmp/checkpoints"
+os.makedirs(LOCAL_CHECKPOINT_DIR, exist_ok=True)
+
+def upload_weight_to_gcs(local_path, destination_blob_name):
+    """Uploads a trained model checkpoint to Google Cloud Storage."""
+    client = storage.Client()
+    bucket = client.bucket(BUCKET_NAME)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_filename(local_path)
+    print(f"Successfully uploaded {local_path} to gs://{BUCKET_NAME}/{destination_blob_name}")
+
+def download_weight_from_gcs(source_blob_name, local_path):
+    """Downloads an existing model checkpoint from GCS for version resumption."""
+    client = storage.Client()
+    bucket = client.bucket(BUCKET_NAME)
+    blob = bucket.blob(source_blob_name)
+    if blob.exists():
+        blob.download_to_filename(local_path)
+        print(f"Successfully downloaded gs://{BUCKET_NAME}/{source_blob_name} to {local_path}")
+        return True
+    print(f"No existing checkpoint found at gs://{BUCKET_NAME}/{source_blob_name}. Starting fresh.")
+    return False
 
 def run_training(
     metadata_path: str,
@@ -37,6 +61,7 @@ def run_training(
     w: int,
     lambda_1: float,
     lambda_2: float,
+    fine_tuned: bool = False,
 ) -> None:
     """Train the GAN inside a Vertex worker and write local checkpoints."""
     random.seed(42)
@@ -51,7 +76,22 @@ def run_training(
     discriminator = Discriminator(
         min_pitch=min_pitch, max_pitch=max_pitch, w=w, chord_dim=0
     ).to(device)
-
+    
+    if fine_tuned:
+        checkpoint_path = f"{LOCAL_CHECKPOINT_DIR}/{genre}/model_weights_latest.pth"
+        # Download the pre-trained weights from GCS
+        if download_weight_from_gcs(
+            f"checkpoints/{genre}/model_weights_latest.pth", 
+            checkpoint_path
+        ): 
+            # Load the pre-trained weights into the model
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            generator.load_state_dict(checkpoint["generator_state_dict"])
+            conditioner.load_state_dict(checkpoint["conditioner_state_dict"])
+            discriminator.load_state_dict(checkpoint["discriminator_state_dict"])
+        else: 
+            raise FileNotFoundError(f"No pre-trained weights found for genre '{genre}' at gs://{BUCKET_NAME}/checkpoints/{genre}/model_weights_latest.pth")
+        
     dataset = DrumDataset(metadata_path=metadata_path, genre_filter=genre, device=device)
     if not dataset:
         raise ValueError(f"No data found for genre '{genre}'.")
@@ -84,8 +124,7 @@ def run_training(
         "latent_dim": latent_dim,
     }
 
-    Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    train(
+    checkpoints = train(
         generator,
         conditioner,
         discriminator,
@@ -94,9 +133,13 @@ def run_training(
         generator_optimizer,
         discriminator_optimizer,
         options,
-        device,
-        checkpoint_dir=checkpoint_dir,
+        device
     )
+    for checkpoint in checkpoints:
+        upload_weight_to_gcs(
+            checkpoint,
+            f"checkpoints/{genre}_latest.pth"
+        )
     if not any(Path(checkpoint_dir).glob(f"{genre}*.pth")):
         raise FileNotFoundError("Training completed without producing a checkpoint.")
 
@@ -170,6 +213,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--w", type=int, default=int(os.getenv("W", "16")))
     parser.add_argument("--lambda-1", type=float, default=float(os.getenv("LAMBDA_1", "0.01")))
     parser.add_argument("--lambda-2", type=float, default=float(os.getenv("LAMBDA_2", "0.1")))
+    parser.add_argument("--fine-tuned", action="store_true", help="Whether to fine-tune an existing model")
     return parser.parse_args()
 
 
@@ -196,6 +240,7 @@ def main() -> None:
             w=args.w,
             lambda_1=args.lambda_1,
             lambda_2=args.lambda_2,
+            fine_tuned=args.fine_tuned
         )
         upload_directory(checkpoint_dir, args.output_uri)
         LOGGER.info("Uploaded checkpoints to %s", args.output_uri)

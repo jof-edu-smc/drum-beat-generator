@@ -2,6 +2,21 @@ import os
 import torch # type: ignore
 import random 
 import numpy as np # type: ignore
+from google.cloud import storage # type: ignore
+
+BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "your-gan-model-bucket")
+
+def download_weight_from_gcs(source_blob_name, local_path):
+    """Downloads an existing model checkpoint from GCS for version resumption."""
+    client = storage.Client()
+    bucket = client.bucket(BUCKET_NAME)
+    blob = bucket.blob(source_blob_name)
+    if blob.exists():
+        blob.download_to_filename(local_path)
+        print(f"Successfully downloaded gs://{BUCKET_NAME}/{source_blob_name} to {local_path}")
+        return True
+    print(f"No existing checkpoint found at gs://{BUCKET_NAME}/{source_blob_name}. Starting fresh.")
+    return False
 
 def to_conditioner_input(x):
     # target: [B, 1, 128, 16]

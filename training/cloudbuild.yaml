@@ -1,32 +1,38 @@
 steps:
+  # 1. Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
       - '-f'
       - 'training/Dockerfile'
       - '.'
+
+  # 2. Push the commit-SHA tagged image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+
+  # 3. Tag the image as 'latest'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'tag'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
+
+  # 4. Push the 'latest' tagged image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:latest'
-images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/github.com/jof-edu-smc/training:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
 
-# Send build logs strictly to Google Cloud Logging
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
+
 options:
   logging: CLOUD_LOGGING_ONLY
 
-# Optional: timeout matching Cloud Build's default (10 minutes)
 timeout: '600s'
