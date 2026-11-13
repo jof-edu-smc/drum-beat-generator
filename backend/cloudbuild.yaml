@@ -29,6 +29,7 @@ steps:
       - '--memory=16Gi'
       - '--gpu=1'
       - '--gpu-type=nvidia-l4'
+      - '--no-gpu-zonal-redundancy'
       - '--allow-unauthenticated'
 
 # Store and push the built image reference
