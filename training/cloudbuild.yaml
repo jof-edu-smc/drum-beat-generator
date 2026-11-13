@@ -3,28 +3,26 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '${_IMAGE_URI}:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:$COMMIT_SHA'
       - '-f'
       - 'training/Dockerfile'
       - '.'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - '${_IMAGE_URI}:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:$COMMIT_SHA'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'tag'
-      - '${_IMAGE_URI}:$COMMIT_SHA'
-      - '${_IMAGE_URI}:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:latest'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - '${_IMAGE_URI}:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:latest'
 images:
-  - '${_IMAGE_URI}:$COMMIT_SHA'
-  - '${_IMAGE_URI}:latest'
-substitutions:
-  _IMAGE_URI: 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drumbeat/training:latest'
 
 # Send build logs strictly to Google Cloud Logging
 options:
