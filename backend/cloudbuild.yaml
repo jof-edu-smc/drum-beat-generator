@@ -24,13 +24,12 @@ steps:
       - 'deploy'
       - 'backend-service'
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/backend-$REPO_NAME:$COMMIT_SHA'
-      - '--region=us-central1'
+      - '--region=europe-west1'
       - '--cpu=4'
       - '--memory=16Gi'
       - '--gpu=1'
       - '--gpu-type=nvidia-l4'
       - '--no-gpu-zonal-redundancy'
-      - '--region=europe-west1'
       - '--allow-unauthenticated'
 
 # Store and push the built image reference
