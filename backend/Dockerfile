@@ -3,8 +3,8 @@
 # ==========================================
 
 # Use an official PyTorch runtime image with CUDA support
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
-# FROM python:3.11-slim AS backend-runner
+# FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+FROM python:3.11-slim AS backend-runner
 
 WORKDIR /app
 
