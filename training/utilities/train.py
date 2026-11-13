@@ -11,11 +11,10 @@ def train(
     generator, conditioner, discriminator,
     train_dataloader, val_dataloader,
     generator_optimizer, discriminator_optimizer,
-    opt, device, checkpoint_dir='checkpoints'
+    opt, device
 ):
-    
-
-    
+    checkpoints = []
+    os.makedirs("/tmp/checkpoints", exist_ok=True)
     best_val_g_fm = float('inf')
     train_start_time = time.time()
     epochs = opt.epochs
@@ -28,7 +27,7 @@ def train(
     wandb_init = getattr(wandb, "init", None)
     if not callable(wandb_init):
         raise RuntimeError("The installed wandb package does not provide wandb.init().")
-
+    
     run: Any = wandb_init(
         entity="jof3",
         project="drumbeat-generator",
@@ -225,8 +224,9 @@ def train(
             print(f"New best model found at epoch {epoch_num + 1} with val G_fm: {val_g_fm:.4f}. Saving checkpoint at {datestamp}.")
             if val_g_fm < best_val_g_fm:
                 best_val_g_fm = val_g_fm
-            torch.save(checkpoint, os.path.join(checkpoint_dir, f"{opt.genre}_e{epoch_num + 1}_{fm_tag}_{datestamp}.pth"))
-
+            checkpoint_path = os.path.join("/tmp/checkpoints", f"{opt.genre}_e{epoch_num + 1}_{fm_tag}_{datestamp}.pth")
+            torch.save(checkpoint, checkpoint_path)
+            checkpoints.append(checkpoint_path)
 
         # --- Logging ---
         print(f"Discriminator Loss: {D_loss_standard.item():.4f}")
@@ -245,6 +245,7 @@ def train(
     total_train_time = train_end_time - train_start_time
     run.finish()
     print(f"Total training time: {total_train_time:.2f} seconds ({total_train_time / 60:.2f} minutes)")
+    return checkpoints
 
 def to_conditioner_input(x):
     # target: [B, 1, 128, 16]
