@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
       - '-f'
       - 'training/Dockerfile'
       - '.'
@@ -13,24 +13,24 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
 
   # 3. Tag the image as 'latest'
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'tag'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
 
   # 4. Push the 'latest' tagged image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
