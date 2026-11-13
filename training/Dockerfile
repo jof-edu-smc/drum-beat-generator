@@ -14,7 +14,7 @@ COPY training/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt 
 
 # Copy the training package and Vertex entrypoints.
-COPY training/train.py ./
+COPY training/main.py ./
 COPY training/datasets/ ./datasets/
 COPY training/models/ ./models/
 COPY training/utilities/ ./utilities/
