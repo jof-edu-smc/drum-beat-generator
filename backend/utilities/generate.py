@@ -1,21 +1,22 @@
 import os
+import tempfile
 import torch # type: ignore
 import random 
 import numpy as np # type: ignore
 from google.cloud import storage # type: ignore
 
-BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "your-gan-model-bucket")
+MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
 
 def download_weight_from_gcs(source_blob_name, local_path):
     """Downloads an existing model checkpoint from GCS for version resumption."""
     client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    bucket = client.bucket(MODEL_WEIGHTS)
     blob = bucket.blob(source_blob_name)
     if blob.exists():
         blob.download_to_filename(local_path)
-        print(f"Successfully downloaded gs://{BUCKET_NAME}/{source_blob_name} to {local_path}")
+        print(f"Successfully downloaded gs://{MODEL_WEIGHTS}/{source_blob_name} to {local_path}")
         return True
-    print(f"No existing checkpoint found at gs://{BUCKET_NAME}/{source_blob_name}. Starting fresh.")
+    print(f"No existing checkpoint found at gs://{MODEL_WEIGHTS}/{source_blob_name}. Starting fresh.")
     return False
 
 def to_conditioner_input(x):
@@ -32,8 +33,8 @@ def to_conditioner_input(x):
 
 def generate_music(generator, conditioner,
                    opt, device, NUM_BARS_TO_GENERATE=4,
-                   CHORD_PROGRESSION=None, 
-                   checkpoint_path=None, creativity=1.0, custom_conditions=None):
+                   CHORD_PROGRESSION=None, is_dev=False,
+                   creativity=1.0, custom_conditions=None):
     torch.seed()
     random.seed()
     np.random.seed()
@@ -41,13 +42,22 @@ def generate_music(generator, conditioner,
     print(f"Generating {NUM_BARS_TO_GENERATE} bars of music with creativity={creativity} on device {device}")
     if CHORD_PROGRESSION is not None and NUM_BARS_TO_GENERATE != len(CHORD_PROGRESSION):
         raise ValueError("Length of NUM_BARS_TO_GENERATE must match length of CHORD_PROGRESSION")
-
+    
+    if is_dev:
+        # Set checkpoint path to a local file for development
+        checkpoint_path = os.path.join("weights", f"{opt.genre}/model_weights_latest.pth")
+    else:
+        # Download the checkpoint from GCS to a temporary local file
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            checkpoint_path = tmp.name
+    
     if checkpoint_path is None:
         raise ValueError("checkpoint_path must be provided when TRAINING_ON is True.")
 
     if not os.path.isfile(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
 
+    download_weight_from_gcs(f"{opt.genre}/model_weights_latest.pth", checkpoint_path)
     print(f"Loading checkpoint {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])

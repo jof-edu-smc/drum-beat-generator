@@ -24,7 +24,7 @@ steps:
       - 'deploy'
       - 'backend-service'
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/backend-$REPO_NAME:$COMMIT_SHA'
-      - '--region=europe-west1'
+      - '--region=us-east4'
       - '--cpu=4'
       - '--memory=16Gi'
       - '--gpu=1'

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import itertools
 import logging
 import os
@@ -135,10 +136,11 @@ def run_training(
         options,
         device
     )
+    datestamp = time.strftime("%Y%m%d-%H%M%S")
     for checkpoint in checkpoints:
         upload_weight_to_gcs(
             checkpoint,
-            f"checkpoints/{genre}_latest.pth"
+            f"checkpoints/{genre}/model_weights_{datestamp}.pth"
         )
     if not any(Path(checkpoint_dir).glob(f"{genre}*.pth")):
         raise FileNotFoundError("Training completed without producing a checkpoint.")

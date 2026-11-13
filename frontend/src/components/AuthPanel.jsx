@@ -15,7 +15,8 @@ export default function AuthPanel({ onAuthenticated, onSignedOut, user }) {
   const buttonRef = useRef(null);
   const [authError, setAuthError] = useState('');
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
+  console.log('AuthPanel user:', user);
+  console.log('AuthPanel clientId:', clientId);
   useEffect(() => {
     if (user || !clientId || !buttonRef.current) return undefined;
 
