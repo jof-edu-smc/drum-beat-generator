@@ -1,25 +1,8 @@
 import os
-import torch
-import numpy as np
+import torch # type: ignore
+import numpy as np # type: ignore
 import pretty_midi # type: ignore
 from google.cloud import storage # type: ignore
-
-def get_weights_from_gcs(bucket_name, blob_name, local_path):
-    """
-    returns model weights from GCS bucket and saves them to local_path
-    Parameters:
-    - bucket_name: str, name of the GCS bucket
-    - blob_name: str, name of the blob (file) in the GCS bucket
-    - local_path: str, local file path where the blob will be saved
-    Returns: dictionary of model weights loaded from the local file
-    """
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    
-    
-    return None
-    
 
 def _tensor_input_to_matrix(tensor_input):
         if isinstance(tensor_input, list):

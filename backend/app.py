@@ -18,7 +18,6 @@ from utilities.files import (
     append_gan_tensor_to_drums,
     save_gan_tensor_to_drums,
     generate_gcs_url,
-    get_weights_from_gcs,
     process_midi_to_tensor_list,
 )
 from flask import Flask, Response, abort, jsonify, request, send_from_directory, url_for # type: ignore
@@ -44,8 +43,6 @@ MAX_PITCH = int(os.getenv("MAX_PITCH", "59"))
 W = int(os.getenv("W", "16"))
 CHORD_DIM = int(os.getenv("CHORD_DIM", "0"))
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CKPT_DIR='checkpoints/' # DO NOT MODIFY Directory to save model checkpoints.
-PRETAINED_DIR = os.getenv("PRETRAINED_DIR", 'weights/')
 DEV = os.getenv("DEV", "False").lower() in {"1", "true", "yes", "on"}
 
 request_times: defaultdict[str, deque[float]] = defaultdict(deque)
@@ -233,7 +230,6 @@ def generate():
             device=DEVICE,
             NUM_BARS_TO_GENERATE=num_bars,
             CHORD_PROGRESSION=None,
-            checkpoint_path=os.path.join(PRETAINED_DIR, f"{genre}_model_weights.pth"),
             creativity=creativity,
             custom_conditions=custom_conditions
         )

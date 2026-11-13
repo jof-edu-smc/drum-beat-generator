@@ -28,7 +28,7 @@ steps:
       - 'deploy'
       - 'frontend-service'
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
-      - '--region=us-central1'
+      - '--region=europe-west1'
       - '--allow-unauthenticated'
 
 # Store and push the built image reference
