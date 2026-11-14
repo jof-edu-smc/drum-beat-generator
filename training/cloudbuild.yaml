@@ -1,28 +1,22 @@
 steps:
-  # 1. Build the container image using the Dockerfile in the 'training' directory
-  - name: 'gcr.io/cloud-builders/docker'
-    dir: 'training'
+  - name: gcr.io/cloud-builders/docker
     args:
-      - 'build'
+      - build
       - '-t'
-      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
+      - gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA
       - '-f'
-      - 'Dockerfile'
-      - '.'
-
-  # 2. Push the built image to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
+      - Dockerfile
+      - .
+    dir: training
+  - name: gcr.io/cloud-builders/docker
     args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
-
-  # 3. Deploy the container image to Cloud Run with GPU specs, env vars, and secrets
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'gcloud'
+      - push
+      - gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     args:
-      - 'run'
-      - 'deploy'
-      - 'training-service'
+      - run
+      - deploy
+      - training-service
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
       - '--region=europe-west1'
       - '--cpu=4'
@@ -31,17 +25,11 @@ steps:
       - '--gpu-type=nvidia-l4'
       - '--no-gpu-zonal-redundancy'
       - '--allow-unauthenticated'
-      - '--env-vars-file=training/env.yaml'
-      - '--env-vars=GCS_BUCKET_NAME=$_GCS_BUCKET_NAME'
-      - '--set-secrets=WANDB_API_KEY=weights_and_biases_secret:latest'
-
-# Store and push the built image reference
+      - '--set-env-vars=WANDB_MODE=$_WANDB_MODE,MODEL_WEIGHTS_BUCKET=$_MODEL_WEIGHTS_BUCKET,TRAINING_DATA_BUCKET=$_TRAINING_DATA_BUCKET,MIDI_PREFIX=$_MIDI_PREFIX'
+      - '--set-secrets=WANDB_API_KEY=weights_and_biases_secret:latest,TRAINING_API_KEY=drumbeat_beat_backend_api_key_secret:latest'
+    entrypoint: gcloud
+timeout: 1200s
 images:
-  - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
-
-# Send build logs strictly to Google Cloud Logging
+  - gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA
 options:
   logging: CLOUD_LOGGING_ONLY
-
-# Build execution timeout
-timeout: '1200s'

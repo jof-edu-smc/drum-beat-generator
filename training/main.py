@@ -1,8 +1,7 @@
-"""Vertex AI batch-training entrypoint for the drumbeat GAN."""
+"""Flask API service for the drumbeat GAN training pipeline using minimal environment configuration and API key auth."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import time
 import itertools
@@ -11,10 +10,10 @@ import os
 import random
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
 
 import numpy as np # type: ignore
 import torch # type: ignore
+from flask import Flask, jsonify, request # type: ignore
 from google.cloud import storage # type: ignore
 from torch.utils.data import DataLoader # type: ignore
 
@@ -22,32 +21,40 @@ from datasets.dataset import DrumDataset
 from models.gan import Conditioner, Discriminator, Generator
 from utilities.train import train
 
+logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-# Configuration from environment variables
-BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "your-gan-model-bucket")
+app = Flask(__name__)
+
+# Only the 4 requested environment variables are read here
+TRAINING_DATA_BUCKET = os.getenv("TRAINING_DATA_BUCKET", "drumbeat-studio-training-data")
+MODEL_WEIGHTS_BUCKET = os.getenv("MODEL_WEIGHTS_BUCKET", "drumbeat-studio-model-training-data")
+MIDI_PREFIX = os.getenv("MIDI_PREFIX", "Apple").strip("/")
+
 LOCAL_CHECKPOINT_DIR = "/tmp/checkpoints"
 os.makedirs(LOCAL_CHECKPOINT_DIR, exist_ok=True)
 
 def upload_weight_to_gcs(local_path, destination_blob_name):
-    """Uploads a trained model checkpoint to Google Cloud Storage."""
+    """Uploads a trained model checkpoint to the model weights GCS bucket."""
     client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    bucket = client.bucket(MODEL_WEIGHTS_BUCKET)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(local_path)
-    print(f"Successfully uploaded {local_path} to gs://{BUCKET_NAME}/{destination_blob_name}")
+    LOGGER.info("Successfully uploaded %s to gs://%s/%s", local_path, MODEL_WEIGHTS_BUCKET, destination_blob_name)
+
 
 def download_weight_from_gcs(source_blob_name, local_path):
-    """Downloads an existing model checkpoint from GCS for version resumption."""
+    """Downloads an existing model checkpoint from the model weights GCS bucket for fine-tuning."""
     client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    bucket = client.bucket(MODEL_WEIGHTS_BUCKET)
     blob = bucket.blob(source_blob_name)
     if blob.exists():
         blob.download_to_filename(local_path)
-        print(f"Successfully downloaded gs://{BUCKET_NAME}/{source_blob_name} to {local_path}")
+        LOGGER.info("Successfully downloaded gs://%s/%s to %s", MODEL_WEIGHTS_BUCKET, source_blob_name, local_path)
         return True
-    print(f"No existing checkpoint found at gs://{BUCKET_NAME}/{source_blob_name}. Starting fresh.")
+    LOGGER.info("No existing checkpoint found at gs://%s/%s. Starting fresh.", MODEL_WEIGHTS_BUCKET, source_blob_name)
     return False
+
 
 def run_training(
     metadata_path: str,
@@ -62,9 +69,11 @@ def run_training(
     w: int,
     lambda_1: float,
     lambda_2: float,
+    pin_memory: bool,
+    num_workers: int,
     fine_tuned: bool = False,
 ) -> None:
-    """Train the GAN inside a Vertex worker and write local checkpoints."""
+    """Train the GAN inside the container worker and write local checkpoints."""
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
@@ -80,18 +89,17 @@ def run_training(
     
     if fine_tuned:
         checkpoint_path = f"{LOCAL_CHECKPOINT_DIR}/{genre}/model_weights_latest.pth"
-        # Download the pre-trained weights from GCS
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         if download_weight_from_gcs(
             f"checkpoints/{genre}/model_weights_latest.pth", 
             checkpoint_path
         ): 
-            # Load the pre-trained weights into the model
             checkpoint = torch.load(checkpoint_path, map_location=device)
             generator.load_state_dict(checkpoint["generator_state_dict"])
             conditioner.load_state_dict(checkpoint["conditioner_state_dict"])
             discriminator.load_state_dict(checkpoint["discriminator_state_dict"])
         else: 
-            raise FileNotFoundError(f"No pre-trained weights found for genre '{genre}' at gs://{BUCKET_NAME}/checkpoints/{genre}/model_weights_latest.pth")
+            raise FileNotFoundError(f"No pre-trained weights found for genre '{genre}' at gs://{MODEL_WEIGHTS_BUCKET}/checkpoints/{genre}/model_weights_latest.pth")
         
     dataset = DrumDataset(metadata_path=metadata_path, genre_filter=genre, device=device)
     if not dataset:
@@ -101,11 +109,16 @@ def run_training(
     eval_size = len(dataset) - train_size
     if train_size == 0 or eval_size == 0:
         raise ValueError("The dataset must contain enough bars for train and validation splits.")
+    
     train_dataset, eval_dataset = torch.utils.data.random_split(
         dataset, [train_size, eval_size], generator=torch.Generator().manual_seed(42)
     )
-    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    eval_dataloader = DataLoader(dataset=eval_dataset, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataLoader(
+        dataset=train_dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers
+    )
+    eval_dataloader = DataLoader(
+        dataset=eval_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_memory, num_workers=num_workers
+    )
 
     generator_optimizer = torch.optim.RMSprop(
         itertools.chain(generator.parameters(), conditioner.parameters()), lr=learning_rate
@@ -136,6 +149,7 @@ def run_training(
         options,
         device
     )
+    
     datestamp = time.strftime("%Y%m%d-%H%M%S")
     for checkpoint in checkpoints:
         upload_weight_to_gcs(
@@ -146,107 +160,138 @@ def run_training(
         raise FileNotFoundError("Training completed without producing a checkpoint.")
 
 
-def _gcs_parts(uri: str) -> tuple[str, str]:
-    parsed = urlparse(uri)
-    if parsed.scheme != "gs" or not parsed.netloc:
-        raise ValueError(f"Expected a gs:// URI, received: {uri}")
-    return parsed.netloc, parsed.path.lstrip("/")
-
-
-def _download_blob(client: storage.Client, uri: str, destination: Path) -> None:
-    bucket_name, blob_name = _gcs_parts(uri)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    client.bucket(bucket_name).blob(blob_name).download_to_filename(destination)
-
-
-def _relative_dataset_path(path: str) -> str:
-    normalized = Path(path)
-    parts = normalized.parts
-    if "datasets" in parts:
-        return str(Path(*parts[parts.index("datasets") + 1 :]))
-    return normalized.name
-
-
-def stage_dataset(metadata_uri: str, dataset_uri: str, stage_dir: Path) -> Path:
-    """Download metadata and every MIDI referenced by it into a local tree."""
+def stage_dataset(stage_dir: Path) -> Path:
+    """Download metadata.json and referenced MIDI files from the training data bucket using MIDI_PREFIX."""
     client = storage.Client()
+    training_bucket = client.bucket(TRAINING_DATA_BUCKET)
+
     metadata_path = stage_dir / "metadata.json"
-    _download_blob(client, metadata_uri, metadata_path)
+    metadata_blob = training_bucket.blob("metadata.json")
+    if not metadata_blob.exists():
+        raise FileNotFoundError(f"metadata.json not found in gs://{TRAINING_DATA_BUCKET}/")
+    
+    metadata_blob.download_to_filename(metadata_path)
 
     with metadata_path.open() as metadata_file:
         metadata = json.load(metadata_file)
 
-    dataset_bucket, dataset_prefix = _gcs_parts(dataset_uri)
-    dataset_prefix = dataset_prefix.rstrip("/")
     for item in metadata.get("files", []):
-        relative_path = _relative_dataset_path(item["midi_path"])
-        item["midi_path"] = relative_path
-        destination = stage_dir / relative_path
-        source_uri = f"gs://{dataset_bucket}/{dataset_prefix}/{relative_path}"
-        _download_blob(client, source_uri, destination)
+        midi_path_raw = item["midi_path"]
+        normalized_name = Path(midi_path_raw).name
+        item["midi_path"] = normalized_name
+        
+        destination = stage_dir / normalized_name
+        blob_name = f"{MIDI_PREFIX}/{normalized_name}" if MIDI_PREFIX else normalized_name
+        midi_blob = training_bucket.blob(blob_name)
+        
+        if midi_blob.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            midi_blob.download_to_filename(destination)
+        else:
+            LOGGER.warning("MIDI file not found at gs://%s/%s", TRAINING_DATA_BUCKET, blob_name)
 
     with metadata_path.open("w") as metadata_file:
         json.dump(metadata, metadata_file)
+        
     return metadata_path
 
 
-def upload_directory(directory: Path, output_uri: str) -> None:
-    client = storage.Client()
-    bucket_name, prefix = _gcs_parts(output_uri)
-    bucket = client.bucket(bucket_name)
-    for file_path in directory.rglob("*"):
-        if file_path.is_file():
-            relative_path = file_path.relative_to(directory).as_posix()
-            bucket.blob(f"{prefix.rstrip('/')}/{relative_path}").upload_from_filename(file_path)
+@app.route("/", methods=["GET"])
+def health_check():
+    """Cloud Run health check endpoint."""
+    return jsonify({"status": "healthy", "service": "training-service"}), 200
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--metadata-uri", required=True, help="gs:// URI for metadata.json")
-    parser.add_argument("--dataset-uri", required=True, help="gs:// prefix containing MIDI files")
-    parser.add_argument("--output-uri", default=os.getenv("AIP_MODEL_DIR"))
-    parser.add_argument("--genre", default=os.getenv("GENRE", "all"))
-    parser.add_argument("--epochs", type=int, default=int(os.getenv("N_EPOCHS", "10")))
-    parser.add_argument("--batch-size", type=int, default=int(os.getenv("BATCH_SIZE", "32")))
-    parser.add_argument("--learning-rate", type=float, default=float(os.getenv("LEARNING_RATE", "0.0002")))
-    parser.add_argument("--latent-dim", type=int, default=int(os.getenv("LATENT_DIM", "100")))
-    parser.add_argument("--min-pitch", type=int, default=int(os.getenv("MIN_PITCH", "22")))
-    parser.add_argument("--max-pitch", type=int, default=int(os.getenv("MAX_PITCH", "59")))
-    parser.add_argument("--w", type=int, default=int(os.getenv("W", "16")))
-    parser.add_argument("--lambda-1", type=float, default=float(os.getenv("LAMBDA_1", "0.01")))
-    parser.add_argument("--lambda-2", type=float, default=float(os.getenv("LAMBDA_2", "0.1")))
-    parser.add_argument("--fine-tuned", action="store_true", help="Whether to fine-tune an existing model")
-    return parser.parse_args()
+@app.route("/train", methods=["POST"])
+def trigger_training():
+    """API endpoint triggered by Google Cloud Scheduler with TRAINING_API_KEY validation."""
+    expected_api_key = os.getenv("TRAINING_API_KEY")
+    if expected_api_key:
+        auth_header = request.headers.get("X-Training-Api-Key", "")
+        if auth_header != expected_api_key:
+            return jsonify({"error": "Unauthorized API key"}), 401
 
+    payload = request.get_json(silent=True)
+    if not payload:
+        return jsonify({"status": "error", "message": "Missing or invalid JSON payload"}), 400
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO)
-    args = parse_args()
-    if not args.output_uri:
-        raise ValueError("--output-uri or AIP_MODEL_DIR is required")
+    required_keys = [
+        "genre", "epochs", "batch_size", "learning_rate", 
+        "latent_dim", "min_pitch", "max_pitch", "w", 
+        "lambda_1", "lambda_2", "pin_memory", "fine_tune", "num_workers"
+    ]
 
-    with tempfile.TemporaryDirectory() as temporary_directory:
-        stage_dir = Path(temporary_directory) / "dataset"
-        metadata_path = stage_dataset(args.metadata_uri, args.dataset_uri, stage_dir)
-        checkpoint_dir = Path(temporary_directory) / "checkpoints"
-        run_training(
-            metadata_path=str(metadata_path),
-            checkpoint_dir=str(checkpoint_dir),
-            genre=args.genre,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            latent_dim=args.latent_dim,
-            min_pitch=args.min_pitch,
-            max_pitch=args.max_pitch,
-            w=args.w,
-            lambda_1=args.lambda_1,
-            lambda_2=args.lambda_2,
-            fine_tuned=args.fine_tuned
-        )
-        upload_directory(checkpoint_dir, args.output_uri)
-        LOGGER.info("Uploaded checkpoints to %s", args.output_uri)
+    missing_keys = [key for key in required_keys if key not in payload]
+    if missing_keys:
+        return jsonify({
+            "status": "error", 
+            "message": f"Missing required payload parameters: {', '.join(missing_keys)}"
+        }), 400
+
+    try:
+        genre = str(payload["genre"])
+        epochs = int(payload["epochs"])
+        batch_size = int(payload["batch_size"])
+        learning_rate = float(payload["learning_rate"])
+        latent_dim = int(payload["latent_dim"])
+        min_pitch = int(payload["min_pitch"])
+        max_pitch = int(payload["max_pitch"])
+        w = int(payload["w"])
+        lambda_1 = float(payload["lambda_1"])
+        lambda_2 = float(payload["lambda_2"])
+        
+        pin_memory_raw = payload["pin_memory"]
+        pin_memory = pin_memory_raw if isinstance(pin_memory_raw, bool) else str(pin_memory_raw).lower() == "true"
+
+        fine_tune_raw = payload["fine_tune"]
+        fine_tuned = fine_tune_raw if isinstance(fine_tune_raw, bool) else str(fine_tune_raw).lower() == "true"
+
+        num_workers = int(payload["num_workers"])
+
+    except (ValueError, TypeError) as e:
+        return jsonify({
+            "status": "error", 
+            "message": f"Parameter type validation failed: {str(e)}"
+        }), 400
+
+    try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            stage_dir = Path(temporary_directory) / "dataset"
+            metadata_path = stage_dataset(stage_dir)
+            checkpoint_dir = Path(temporary_directory) / "checkpoints"
+            
+            run_training(
+                metadata_path=str(metadata_path),
+                checkpoint_dir=str(checkpoint_dir),
+                genre=genre,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                latent_dim=latent_dim,
+                min_pitch=min_pitch,
+                max_pitch=max_pitch,
+                w=w,
+                lambda_1=lambda_1,
+                lambda_2=lambda_2,
+                pin_memory=pin_memory,
+                num_workers=num_workers,
+                fine_tuned=fine_tuned
+            )
+            
+            LOGGER.info("Successfully completed training for genre '%s' and uploaded checkpoints to bucket %s", genre, MODEL_WEIGHTS_BUCKET)
+            
+        return jsonify({
+            "status": "success", 
+            "message": "Training completed successfully", 
+            "genre": genre,
+            "weights_bucket": MODEL_WEIGHTS_BUCKET
+        }), 200
+
+    except Exception as e:
+        LOGGER.exception("Training job failed with error: %s", str(e))
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
