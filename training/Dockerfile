@@ -8,15 +8,16 @@ WORKDIR /app
 # Prevent Python from writing .pyc files and enable buffering
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
 # Install Python dependencies
-COPY training/requirements.txt ./
+COPY requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt 
 
 # Copy the training package and Vertex entrypoints.
-COPY training/main.py ./
-COPY training/datasets/ ./datasets/
-COPY training/models/ ./models/
-COPY training/utilities/ ./utilities/
+COPY main.py ./
+COPY datasets/ ./datasets/
+COPY models/ ./models/
+COPY utilities/ ./utilities/
 
 ENTRYPOINT ["python", "main.py"]
