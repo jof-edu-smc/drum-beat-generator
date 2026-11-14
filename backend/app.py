@@ -287,4 +287,7 @@ def catch_all(path: str):
     return send_from_directory(STATIC_DIR, 'index.html')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=True)
+    if DEV:
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=True)
+    else:
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")), debug=False)
