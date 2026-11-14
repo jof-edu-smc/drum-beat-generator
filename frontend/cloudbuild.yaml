@@ -8,6 +8,8 @@ steps:
       - 'VITE_BACKEND_URL=$_VITE_BACKEND_URL'
       - '--build-arg'
       - 'VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID'
+      - '--build-arg'
+      - 'VITE_GCS_AUDIO_BASE_URL=$_VITE_GCS_AUDIO_BASE_URL'
       - '-t'
       - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/frontend-$REPO_NAME:$COMMIT_SHA'
       - '-f'

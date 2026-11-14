@@ -24,13 +24,14 @@ steps:
       - 'deploy'
       - 'backend-service'
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/backend-$REPO_NAME:$COMMIT_SHA'
-      - '--region=us-east4'
+      - '--region=europe-west1'
       - '--cpu=4'
       - '--memory=16Gi'
       - '--gpu=1'
       - '--gpu-type=nvidia-l4'
       - '--no-gpu-zonal-redundancy'
       - '--allow-unauthenticated'
+      - '--set-env-vars=GCS_MODEL_WEIGHTS=$_GCS_MODEL_WEIGHTS,GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID,ALLOWED_ORIGINS=$_ALLOWED_ORIGINS,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME,DEV=$_DEV,API_RATE_LIMIT=$_API_RATE_LIMIT'
 
 # Store and push the built image reference
 images:
