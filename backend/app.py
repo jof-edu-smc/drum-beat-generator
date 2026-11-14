@@ -28,7 +28,7 @@ pp = pprint.PrettyPrinter(indent=4)
 load_dotenv()
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = str(APP_DIR)
-API_KEY = os.getenv("DRUMBEAT_API_KEY") or os.getenv("API_KEY")
+
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GENERATION_SERVICE_URL = os.getenv(
     "GENERATION_SERVICE_URL",
@@ -93,15 +93,6 @@ def protect_api():
     if len(recent_requests) >= RATE_LIMIT:
         return jsonify({"error": "Too many requests. Try again later."}), 429
     recent_requests.append(now)
-
-    if not API_KEY:
-        app.logger.error("API_KEY is not configured; refusing protected API access")
-        return jsonify({"error": "API is not configured for authenticated access."}), 503
-
-    supplied_key = request.headers.get("X-API-Key", "")
-    if not hmac.compare_digest(supplied_key, API_KEY):
-        app.logger.warning("Unauthorized API access attempt from %s", client)
-        return jsonify({"error": "Unauthorized"}), 401
     return None
 
 
@@ -128,14 +119,11 @@ def frontend_generate():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify({"error": "A JSON object is required."}), 400
-    if not API_KEY:
-        app.logger.error("API_KEY is not configured; refusing BFF request")
-        return jsonify({"error": "API is not configured."}), 503
 
     upstream_request = urllib.request.Request(
         GENERATION_SERVICE_URL,
         data=jsonify(payload).get_data(),
-        headers={"Content-Type": "application/json", "X-API-Key": API_KEY},
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:

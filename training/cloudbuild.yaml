@@ -18,13 +18,12 @@ steps:
       - deploy
       - training-service
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
-      - '--region=europe-west1'
+      - '--region=us-east4'
       - '--cpu=4'
       - '--memory=16Gi'
       - '--gpu=1'
       - '--gpu-type=nvidia-l4'
       - '--no-gpu-zonal-redundancy'
-      - '--allow-unauthenticated'
       - '--set-env-vars=WANDB_MODE=$_WANDB_MODE,MODEL_WEIGHTS_BUCKET=$_MODEL_WEIGHTS_BUCKET,TRAINING_DATA_BUCKET=$_TRAINING_DATA_BUCKET,MIDI_PREFIX=$_MIDI_PREFIX'
       - '--set-secrets=WANDB_API_KEY=weights_and_biases_secret:latest,TRAINING_API_KEY=drumbeat_beat_backend_api_key_secret:latest'
     entrypoint: gcloud
