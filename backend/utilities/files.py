@@ -24,7 +24,7 @@ def _save_midi(midi_data, output_path, is_dev):
             midi_data.write(output_path)
         else:
             client = storage.Client()
-            bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")
+            bucket_name = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys")
             blob = client.bucket(bucket_name).blob(output_path)
             blob.upload_from_string(midi_data.write(), content_type='audio/midi')
 
@@ -81,40 +81,20 @@ def append_gan_tensor_to_drums(
             (instrument for instrument in drum_midi.instruments if instrument.is_drum),
             None
         )
+        
         if drum_track is None:
             drum_track = pretty_midi.Instrument(program=0, is_drum=True, name="GAN Drum Kit")
             drum_midi.instruments.append(drum_track)
-
-        matrix = _tensor_input_to_matrix(tensor_input)
-        step_duration = (60.0 / bpm) / 4.0
-        bar_duration = step_duration * 16
-        original_end = max(
-            (note.end for instrument in drum_midi.instruments for note in instrument.notes),
-            default=0.0
-        )
-        append_start = np.ceil(original_end / bar_duration) * bar_duration
-
-        for pitch in range(matrix.shape[0]):
-            for step in range(matrix.shape[1]):
-                if matrix[pitch, step] > 0.5:
-                    start_time = append_start + step * step_duration
-                    drum_track.notes.append(pretty_midi.Note(
-                        velocity=100,
-                        pitch=pitch,
-                        start=start_time,
-                        end=start_time + step_duration
-                    ))
-
-        _save_midi(drum_midi, output_path, is_dev)
-        return output_path
-    
+            
+        return save_gan_tensor_to_drums(tensor_input, output_path, bpm, is_dev)
+        
 def generate_gcs_url(file_path):
     """
     Generates a public URL for a file stored in Google Cloud Storage.
     Assumes the file is already uploaded to GCS and is publicly accessible.
     """
     client = storage.Client()
-    bucket_name = os.getenv("GCS_BUCKET_NAME", "some_drum_thingys")  # Ensure this environment variable is set
+    bucket_name = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys")  # Ensure this environment variable is set
     blob_name = file_path.split("/")[-1]  # Assuming the file name is the last part of the path
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
