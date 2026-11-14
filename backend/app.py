@@ -47,7 +47,6 @@ DEV = os.getenv("DEV", "False").lower() in {"1", "true", "yes", "on"}
 
 request_times: defaultdict[str, deque[float]] = defaultdict(deque)
 
-# FIX: Explicitly pass absolute paths to Flask so it never misses the target inside Docker
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
