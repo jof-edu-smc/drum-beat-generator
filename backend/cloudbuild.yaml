@@ -33,7 +33,7 @@ steps:
       - '--allow-unauthenticated'
       - '--set-env-vars=GCS_MODEL_WEIGHTS=$_GCS_MODEL_WEIGHTS'
       - '--set-env-vars=GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
-      - '--set-env-vars=ALLOWED_ORIGINS=$_ALLOWED_ORIGINS'
+      - '--set-env-vars=ALLOWED_ORIGINS="$_ALLOWED_ORIGINS"'
       - '--set-env-vars=GCS_BUCKET_NAME=$_GCS_BUCKET_NAME'
       - '--set-env-vars=DEV=$_DEV'
       - '--set-env-vars=API_RATE_LIMIT=$_API_RATE_LIMIT'

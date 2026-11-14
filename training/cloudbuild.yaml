@@ -5,7 +5,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
       - '-f'
       - 'Dockerfile'
       - '.'
@@ -14,7 +14,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
 
   # 3. Deploy the container image to Cloud Run with GPU specs, env vars, and secrets
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -23,7 +23,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'training-service'
-      - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+      - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
       - '--region=europe-west1'
       - '--cpu=4'
       - '--memory=16Gi'
@@ -37,7 +37,7 @@ steps:
 
 # Store and push the built image reference
 images:
-  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/drum-beat-generator/training:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
 
 # Send build logs strictly to Google Cloud Logging
 options:
