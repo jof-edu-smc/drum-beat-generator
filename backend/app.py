@@ -112,6 +112,7 @@ def health():
 @app.route("/api/generate", methods=["POST"])
 def frontend_generate():
     """Forward browser requests without exposing the service API key."""
+    
     authentication_error = authenticate_user()
     if authentication_error:
         return authentication_error

@@ -10,6 +10,7 @@ MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
 def download_weight_from_gcs(source_blob_name, local_path):
     """Downloads an existing model checkpoint from GCS for version resumption."""
     client = storage.Client()
+    print(f"Attempting to download checkpoint from gs://{MODEL_WEIGHTS}/{source_blob_name} to {local_path}")
     bucket = client.bucket(MODEL_WEIGHTS)
     blob = bucket.blob(source_blob_name)
     if blob.exists():
