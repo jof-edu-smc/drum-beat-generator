@@ -1,7 +1,9 @@
 import os
+import tempfile
 import torch # type: ignore
 import numpy as np # type: ignore
 import pretty_midi # type: ignore
+from pathlib import Path
 from google.cloud import storage # type: ignore
 
 def _tensor_input_to_matrix(tensor_input):
@@ -18,22 +20,46 @@ def _tensor_input_to_matrix(tensor_input):
         raise TypeError("Input must be a PyTorch tensor or a list of tensors.")
 
 
-def _save_midi(midi_data, output_path, is_dev):
-        if is_dev:
-            print(f"Saving MIDI file to: {output_path}")
-            midi_data.write(output_path)
-        else:
-            client = storage.Client()
-            bucket_name = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys")
-            blob = client.bucket(bucket_name).blob(output_path)
-            blob.upload_from_string(midi_data.write(), content_type='audio/midi')
+def _save_midi(midi_data, output_path, is_dev, bucket_name):
+    if is_dev:
+        print(f"Saving MIDI file to: {output_path}")
+        midi_data.write(output_path)
+        return output_path
 
+    print(f"_save_midi MIDI file to GCS {bucket_name} at: {output_path}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
 
+    # 1. Handle duplicates safely with an incrementing counter loop
+    base_path = output_path
+    counter = 1
+    while bucket.blob(output_path).exists():
+        path_obj = Path(base_path)
+        # Keeps directory and suffix intact while appending _dupe-{counter}
+        output_path = f"{path_obj.parent / path_obj.stem}_dupe-{counter}{path_obj.suffix}"
+        counter += 1
+
+    # 2. Safely write and upload using a temporary file
+    with tempfile.NamedTemporaryFile(suffix=".mid", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        midi_data.write(tmp_path)
+        blob = bucket.blob(output_path)
+        blob.upload_from_filename(tmp_path, content_type='audio/midi')
+        print(f"Successfully uploaded MIDI file to GCS at: gs://{bucket_name}/{output_path}")
+        return output_path
+    finally:
+        # Ensure temporary file cleanup always happens, even if upload fails
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+            
 def save_gan_tensor_to_drums(
     tensor_input, 
     output_path="gan_drums.mid", 
     bpm=120, 
-    is_dev=False
+    is_dev=False,
+    bucket_name=None
 ):
         """
         Converts GAN output into a Groove-compatible MIDI file of ANY length.
@@ -64,8 +90,7 @@ def save_gan_tensor_to_drums(
                     drum_track.notes.append(note)
 
         drum_midi.instruments.append(drum_track)
-        _save_midi(drum_midi, output_path, is_dev)
-        return output_path
+        return _save_midi(drum_midi, output_path, is_dev, bucket_name)
 
 
 def append_gan_tensor_to_drums(
@@ -73,7 +98,8 @@ def append_gan_tensor_to_drums(
     tensor_input,
     output_path="gan_drums.mid",
     bpm=120,
-    is_dev=False
+    is_dev=False,
+    bucket_name=None
 ):
         """Append generated drum bars to an existing MIDI file."""
         drum_midi = pretty_midi.PrettyMIDI(base_midi_path)
@@ -86,15 +112,15 @@ def append_gan_tensor_to_drums(
             drum_track = pretty_midi.Instrument(program=0, is_drum=True, name="GAN Drum Kit")
             drum_midi.instruments.append(drum_track)
             
-        return save_gan_tensor_to_drums(tensor_input, output_path, bpm, is_dev)
+        return save_gan_tensor_to_drums(tensor_input, output_path, bpm, is_dev, bucket_name)
         
-def generate_gcs_url(file_path):
+def generate_gcs_url(file_path, bucket_name):
     """
     Generates a public URL for a file stored in Google Cloud Storage.
     Assumes the file is already uploaded to GCS and is publicly accessible.
     """
     client = storage.Client()
-    bucket_name = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys")  # Ensure this environment variable is set
+    print(f"Generating GCS URL for file: {file_path} in bucket: {bucket_name}")
     blob_name = file_path.split("/")[-1]  # Assuming the file name is the last part of the path
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)

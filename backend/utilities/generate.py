@@ -5,19 +5,17 @@ import random
 import numpy as np # type: ignore
 from google.cloud import storage # type: ignore
 
-MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
-
-def download_weight_from_gcs(source_blob_name, local_path):
+def download_weight_from_gcs(bucket_name, source_blob_name, local_path):
     """Downloads an existing model checkpoint from GCS for version resumption."""
     client = storage.Client()
-    print(f"Attempting to download checkpoint from gs://{MODEL_WEIGHTS}/{source_blob_name} to {local_path}")
-    bucket = client.bucket(MODEL_WEIGHTS)
+    print(f"Attempting to download checkpoint from gs://{bucket_name}/{source_blob_name} to {local_path}")
+    bucket = client.bucket(bucket_name)
     blob = bucket.blob(source_blob_name)
     if blob.exists():
         blob.download_to_filename(local_path)
-        print(f"Successfully downloaded gs://{MODEL_WEIGHTS}/{source_blob_name} to {local_path}")
+        print(f"Successfully downloaded gs://{bucket_name}/{source_blob_name} to {local_path}")
         return True
-    print(f"No existing checkpoint found at gs://{MODEL_WEIGHTS}/{source_blob_name}. Starting fresh.")
+    print(f"No existing checkpoint found at gs://{bucket_name}/{source_blob_name}. Starting fresh.")
     return False
 
 def to_conditioner_input(x):
@@ -35,7 +33,7 @@ def to_conditioner_input(x):
 def generate_music(generator, conditioner,
                    opt, device, NUM_BARS_TO_GENERATE=4,
                    CHORD_PROGRESSION=None, is_dev=False,
-                   creativity=1.0, custom_conditions=None):
+                   creativity=1.0, custom_conditions=None, bucket_name=None):
     torch.seed()
     random.seed()
     np.random.seed()
@@ -57,8 +55,8 @@ def generate_music(generator, conditioner,
 
     if not os.path.isfile(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
-
-    download_weight_from_gcs(f"{opt.genre}/model_weights_latest.pth", checkpoint_path)
+    if bucket_name is not None:
+        download_weight_from_gcs(bucket_name, f"{opt.genre}/model_weights_latest.pth", checkpoint_path)
     print(f"Loading checkpoint {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     generator.load_state_dict(checkpoint["generator_state_dict"])
@@ -73,6 +71,7 @@ def generate_music(generator, conditioner,
     conditioner.eval()
 
     generated_bars = []
+    print(f"Generating {NUM_BARS_TO_GENERATE} bars...")
     while len(generated_bars) < NUM_BARS_TO_GENERATE and attempts < max_attempts:
         pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
         pitch_h = opt.max_pitch - opt.min_pitch + 1
@@ -115,4 +114,5 @@ def generate_music(generator, conditioner,
         attempts += 1
         generated_bars.append(full_bar.squeeze(0).detach().cpu())
         
+    print(f"Generated {len(generated_bars)} bars after {attempts} attempts.")
     return generated_bars

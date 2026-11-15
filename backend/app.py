@@ -36,6 +36,10 @@ GENERATION_SERVICE_URL = os.getenv(
 RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "60"))
 RATE_WINDOW_SECONDS = 60
 
+# GCS Buckets
+MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
+GCS_GENERATED_MIDI = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys") 
+
 LATENT_DIM = int(os.getenv("LATENT_DIM", "100"))
 MIN_PITCH = int(os.getenv("MIN_PITCH", "22"))
 MAX_PITCH = int(os.getenv("MAX_PITCH", "59"))
@@ -218,7 +222,8 @@ def generate():
             NUM_BARS_TO_GENERATE=num_bars,
             CHORD_PROGRESSION=None,
             creativity=creativity,
-            custom_conditions=custom_conditions
+            custom_conditions=custom_conditions,
+            bucket_name=MODEL_WEIGHTS
         )
         
         output_path = (
@@ -226,20 +231,25 @@ def generate():
             if DEV
             else f"{midi_filename}.mid"
         )
+        
         if source_midi_path:
+            print(f"Appending generated bars to source MIDI file: {source_midi_path}")
             file_location = append_gan_tensor_to_drums(
                 base_midi_path=source_midi_path,
                 tensor_input=generated_bars,
                 output_path=output_path,
                 bpm=120,
                 is_dev=DEV,
+                bucket_name=GCS_GENERATED_MIDI
             )
         else:
+            print(f"Saving generated bars to new MIDI file: {output_path}")
             file_location = save_gan_tensor_to_drums(
                 tensor_input=generated_bars,
                 output_path=output_path,
                 bpm=120,
                 is_dev=DEV,
+                bucket_name=GCS_GENERATED_MIDI
             )
         if source_midi_path and os.path.exists(source_midi_path):
             os.unlink(source_midi_path)
@@ -253,9 +263,10 @@ def generate():
                 )
             }), 200
         else:
+            print(f"Sending generated MIDI file to GCS at: {file_location}")
             return jsonify({
                 "message": f"Generated a bar of music at {len(generated_bars)} in the location: {file_location}",
-                "signed_url": generate_gcs_url(file_location)
+                "signed_url": generate_gcs_url(file_location, bucket_name=GCS_GENERATED_MIDI)
             }), 200
     
     except (TypeError, ValueError):
