@@ -11,3 +11,4 @@ python-dotenv==1.2.4
 gunicorn==23.0.0
 pretty_midi==0.2.11
 google-cloud-storage==3.17.1
+wandb==0.31.0
