@@ -19,7 +19,6 @@ def _tensor_input_to_matrix(tensor_input):
             raise ValueError(f"Unexpected tensor shape: {tensor_input.shape}")
         raise TypeError("Input must be a PyTorch tensor or a list of tensors.")
 
-
 def _save_midi(midi_data, output_path, is_dev, bucket_name):
     if is_dev:
         print(f"Saving MIDI file to: {output_path}")
