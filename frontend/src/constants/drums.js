@@ -102,32 +102,32 @@ export const PRESET_DRUMS = {
 };
 
 const GCS_AUDIO_BASE_URL = (
-  import.meta.env.VITE_GCS_AUDIO_BASE_URL || ''
+  import.meta.env.VITE_BACKEND_URL || ''
 ).replace(/\/$/, '');
 
 export const DRUM_SAMPLES = {
-  C2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/kick.flac` : '/audio/kick.flac',
-  D2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/snare_head.flac` : '/audio/snare_head.flac',
-  "D#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/snare_rim.flac` : '/audio/snare_rim.flac',
-  E2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/snare_x_stick.flac` : '/audio/snare_x_stick.flac',
-  F2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_1_rim.flac` : '/audio/tom_1_rim.flac',
-  "F#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_1.flac` : '/audio/tom_1.flac',
-  G2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_2.flac` : '/audio/tom_2.flac',
-  "G#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_2_rim.flac` : '/audio/tom_2_rim.flac',
-  A2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_3.flac` : '/audio/tom_3.flac',
-  "A#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/tom_3_rim.flac` : '/audio/tom_3_rim.flac',
-  B2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/hh_open_edge.flac` : '/audio/hh_open_edge.flac',
-  C3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/hh_open_bow.flac` : '/audio/hh_open_bow.flac',
-  "C#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/hh_closed_bow.flac` : '/audio/hh_closed_bow.flac',
-  D3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/hh_closed_edge.flac` : '/audio/hh_closed_edge.flac',
-  "D#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/hh_pedal.flac` : '/audio/hh_pedal.flac',
-  E3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/crash_1_edge.flac` : '/audio/crash_1_edge.flac',
-  F3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/crash_1_bow.flac` : '/audio/crash_1_bow.flac',
-  "F#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/crash_2_edge.flac` : '/audio/crash_2_edge.flac',
-  G3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/crash_2_bow.flac` : '/audio/crash_2_bow.flac',
-  "G#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/ride_edge.flac` : '/audio/ride_edge.flac',
-  A3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/ride_bow.flac` : '/audio/ride_bow.flac',
-  "A#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/ride_bell.flac` : '/audio/ride_bell.flac'
+  C2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/kick.flac` : '/audio/kick.flac',
+  D2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/snare_head.flac` : '/audio/snare_head.flac',
+  "D#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/snare_rim.flac` : '/audio/snare_rim.flac',
+  E2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/snare_x_stick.flac` : '/audio/snare_x_stick.flac',
+  F2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_1_rim.flac` : '/audio/tom_1_rim.flac',
+  "F#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_1.flac` : '/audio/tom_1.flac',
+  G2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_2.flac` : '/audio/tom_2.flac',
+  "G#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_2_rim.flac` : '/audio/tom_2_rim.flac',
+  A2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_3.flac` : '/audio/tom_3.flac',
+  "A#2": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/tom_3_rim.flac` : '/audio/tom_3_rim.flac',
+  B2: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/hh_open_edge.flac` : '/audio/hh_open_edge.flac',
+  C3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/hh_open_bow.flac` : '/audio/hh_open_bow.flac',
+  "C#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/hh_closed_bow.flac` : '/audio/hh_closed_bow.flac',
+  D3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/hh_closed_edge.flac` : '/audio/hh_closed_edge.flac',
+  "D#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/hh_pedal.flac` : '/audio/hh_pedal.flac',
+  E3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/crash_1_edge.flac` : '/audio/crash_1_edge.flac',
+  F3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/crash_1_bow.flac` : '/audio/crash_1_bow.flac',
+  "F#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/crash_2_edge.flac` : '/audio/crash_2_edge.flac',
+  G3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/crash_2_bow.flac` : '/audio/crash_2_bow.flac',
+  "G#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/ride_edge.flac` : '/audio/ride_edge.flac',
+  A3: GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/ride_bow.flac` : '/audio/ride_bow.flac',
+  "A#3": GCS_AUDIO_BASE_URL ? `${GCS_AUDIO_BASE_URL}/api/sampler/audio/ride_bell.flac` : '/audio/ride_bell.flac'
 };
 
 export const DRUM_INSTRUMENTS = {
