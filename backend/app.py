@@ -25,6 +25,7 @@ from utilities.midi import get_midi_file_from_gcs
 from utilities.sampler import get_audio_file_for_sampler
 from flask import Flask, Response, abort, jsonify, request, send_from_directory, url_for, send_file # type: ignore
 from flask_cors import CORS # type: ignore
+from werkzeug.middleware.proxy_fix import ProxyFix # type: ignore
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -56,9 +57,15 @@ DEV = os.getenv("DEV", "False").lower() in {"1", "true", "yes", "on"}
 request_times: defaultdict[str, deque[float]] = defaultdict(deque)
 
 app = Flask(__name__)
+
+# Proxy fix to intercept headers from reverse proxies (like Nginx) to get the correct client IP and protocol (force HTTPS)
+app.wsgi_app = ProxyFix(
+    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+)
+
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-CORS(app, resources={r"/api/*": {"origins": [origin.strip() for origin in allowed_origins]}})
+CORS(app, resources={r"/api/*": {"origins": [origin.strip() for origin in allowed_origins]}}, supports_credentials=True)
 
 
 def authenticate_user():
