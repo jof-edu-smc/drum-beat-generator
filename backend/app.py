@@ -1,4 +1,5 @@
 import os
+import io
 import time
 import torch # type: ignore
 import pprint 
@@ -11,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv # type: ignore
 from google.auth.transport import requests as google_requests # type: ignore
 from google.oauth2 import id_token as google_id_token # type: ignore
+from google.cloud import storage # type: ignore
 from models.gan import Generator, Conditioner
 from utilities.generate import generate_music
 from utilities.files import (
@@ -19,7 +21,9 @@ from utilities.files import (
     generate_gcs_url,
     process_midi_to_tensor_list,
 )
-from flask import Flask, Response, abort, jsonify, request, send_from_directory, url_for # type: ignore
+from utilities.midi import get_midi_file_from_gcs
+from utilities.sampler import get_audio_file_for_sampler
+from flask import Flask, Response, abort, jsonify, request, send_from_directory, url_for, send_file # type: ignore
 from flask_cors import CORS # type: ignore
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -39,6 +43,7 @@ RATE_WINDOW_SECONDS = 60
 # GCS Buckets
 MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
 GCS_GENERATED_MIDI = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys") 
+DRUM_SAMPLES_BUCKET = os.getenv("GCS_DRUM_SAMPLES", "sampler-audio-files-go-here")
 
 LATENT_DIM = int(os.getenv("LATENT_DIM", "100"))
 MIN_PITCH = int(os.getenv("MIN_PITCH", "22"))
@@ -199,7 +204,6 @@ def generate():
                 )
                 if not isinstance(custom_conditions, list) or not custom_conditions:
                     raise ValueError("The conditioning MIDI does not contain a complete bar.")
-                print("Applying the final bar as a custom condition from MIDI file:", midi_url)
             except (urllib.error.URLError, OSError, ValueError):
                 if source_midi_path and os.path.exists(source_midi_path):
                     os.unlink(source_midi_path)
@@ -233,7 +237,6 @@ def generate():
         )
         
         if source_midi_path:
-            print(f"Appending generated bars to source MIDI file: {source_midi_path}")
             file_location = append_gan_tensor_to_drums(
                 base_midi_path=source_midi_path,
                 tensor_input=generated_bars,
@@ -243,7 +246,6 @@ def generate():
                 bucket_name=GCS_GENERATED_MIDI
             )
         else:
-            print(f"Saving generated bars to new MIDI file: {output_path}")
             file_location = save_gan_tensor_to_drums(
                 tensor_input=generated_bars,
                 output_path=output_path,
@@ -253,31 +255,40 @@ def generate():
             )
         if source_midi_path and os.path.exists(source_midi_path):
             os.unlink(source_midi_path)
-        if DEV:
-            return jsonify({
-                "message": f"Generated a bar of music at {len(generated_bars)} in the location: {file_location}",
-                "signed_url": url_for(
-                    "serve_generated_midi",
-                    filename=Path(file_location).name,
-                    _external=True,
-                )
-            }), 200
-        else:
-            print(f"Sending generated MIDI file to GCS at: {file_location}")
-            return jsonify({
-                "message": f"Generated a bar of music at {len(generated_bars)} in the location: {file_location}",
-                "signed_url": generate_gcs_url(file_location, bucket_name=GCS_GENERATED_MIDI)
-            }), 200
+        return jsonify({
+            "message": f"Generated a bar of music at {len(generated_bars)} in the location: {file_location}",
+            "signed_url": url_for(
+                "serve_generated_midi",
+                filename=Path(file_location).name,
+                _external=True,
+            )
+        }), 200
+        
     
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid generation parameters."}), 400
-
+    
+@app.get("/api/sampler/<path:filename>")
+def serve_generated_audio_files_from_gcs(filename: str):
+    # Serves audio files from GCS for production purposes. In development, audio files are served directly from the local filesystem.
+    if DEV:
+        abort(404)
+    try:
+        return get_audio_file_for_sampler(filename, DRUM_SAMPLES_BUCKET)
+    except Exception as e:
+        app.logger.exception("Error while serving generated audio files from GCS")
+        return jsonify({"error": "An error occurred while processing your request."}), 500
 
 @app.get("/api/midi/<path:filename>")
 def serve_generated_midi(filename: str):
-    if not DEV:
+    if DEV:
+        # If DEV uses a local path, handle it here or abort
         abort(404)
-    return send_from_directory(APP_DIR, filename, mimetype="audio/midi")
+    try:
+        return get_midi_file_from_gcs(filename, GCS_GENERATED_MIDI)
+    except Exception as e:
+        print(f"Error streaming MIDI from GCS: {e}")
+        return jsonify({"error": "Failed to stream the requested file"}), 500
     
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -287,6 +298,6 @@ def catch_all(path: str):
 
 if __name__ == "__main__":
     if DEV:
-        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=True)
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5002")), debug=True)
     else:
         app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")), debug=False)
