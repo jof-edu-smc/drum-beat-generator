@@ -13,12 +13,12 @@ def get_audio_file_for_sampler(file_name, drum_bucket_name):
     Retrieves and streams audio sample files from GCS for the Tone.js sampler
     with correct MIME types and caching headers.
     """
-    storage_client = storage.Client() 
+    storage_client = storage.Client()
     bucket = storage_client.bucket(drum_bucket_name)
     blob = bucket.blob(file_name)
 
     if not blob.exists():
-        return jsonify({"error": f"File {file_name} not found in GCS."}), 404
+        return jsonify({"error": f"File {file_name} not found in bucket {drum_bucket_name}."}), 404
 
     # Download file contents into an in-memory byte buffer
     audio_data = io.BytesIO()

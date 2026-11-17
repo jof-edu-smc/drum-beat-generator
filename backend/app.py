@@ -44,7 +44,7 @@ RATE_WINDOW_SECONDS = 60
 # GCS Buckets
 MODEL_WEIGHTS = os.getenv("GCS_MODEL_WEIGHTS", "your-gan-model-bucket")
 GCS_GENERATED_MIDI = os.getenv("GCS_GENERATED_MIDI", "some_drum_thingys") 
-DRUM_SAMPLES_BUCKET = os.getenv("GCS_DRUM_SAMPLES", "sampler-audio-files-go-here")
+GCS_DRUM_SAMPLES = os.getenv("GCS_DRUM_SAMPLES", "sampler-audio-files-go-here")
 
 LATENT_DIM = int(os.getenv("LATENT_DIM", "100"))
 MIN_PITCH = int(os.getenv("MIN_PITCH", "22"))
@@ -281,7 +281,8 @@ def serve_generated_audio_files_from_gcs(filename: str):
     if DEV:
         abort(404)
     try:
-        return get_audio_file_for_sampler(filename, DRUM_SAMPLES_BUCKET)
+        print(f"Requesting audio file: {filename} from GCS bucket: {GCS_DRUM_SAMPLES}")
+        return get_audio_file_for_sampler(filename, GCS_DRUM_SAMPLES)
     except Exception as e:
         app.logger.exception("Error while serving generated audio files from GCS")
         return jsonify({"error": "An error occurred while processing your request."}), 500
@@ -292,6 +293,7 @@ def serve_generated_midi(filename: str):
         # If DEV uses a local path, handle it here or abort
         abort(404)
     try:
+        print(f"Requesting MIDI file: {filename} from GCS bucket: {GCS_GENERATED_MIDI}")
         return get_midi_file_from_gcs(filename, GCS_GENERATED_MIDI)
     except Exception as e:
         print(f"Error streaming MIDI from GCS: {e}")
