@@ -80,7 +80,9 @@ def train(
     D_loss_standard = torch.zeros((), device=device)
     G_loss_bce = torch.zeros((), device=device)
     G_loss_fm = torch.zeros((), device=device)
- 
+    
+    print(f"Starting training for genre '{opt.genre}' with {opt.epochs} epochs, batch size {opt.batch_size}, learning rate {opt.learning_rate}, latent dimension {opt.latent_dim}, pitch range [{opt.min_pitch}, {opt.max_pitch}], and w={opt.w}.")
+    
     for epoch_num in range(opt.epochs):
         batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
         

@@ -6,13 +6,15 @@ import itertools
 import time
 import numpy as np # type: ignore
 import torch # type: ignore
-
 from torch.utils.data import DataLoader # type: ignore
+from pathlib import Path
+from google.cloud import storage # type: ignore
+
 from datasets.dataset import DrumDataset
 from models.gan import Conditioner, Discriminator, Generator
 from utilities.training_gan import train, Opt
-from pathlib import Path
-from google.cloud import storage # type: ignore
+from utilities.testing import get_safe_num_workers
+
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +56,7 @@ def run_training(opt: Opt) -> None:
     ).to(device)
     
     if opt.fine_tuned:
+        print(f"Attempting to load pre-trained weights for genre '{opt.genre}' from gs://{opt.bucket_name_model_weights}/{opt.genre}/model_weights_latest.pth")
         checkpoint_path = f"{opt.local_checkpoint_dir}/{opt.genre}/model_weights_latest.pth"
         os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         if download_weight_from_gcs(
@@ -80,20 +83,22 @@ def run_training(opt: Opt) -> None:
     train_dataset, eval_dataset = torch.utils.data.random_split(
         dataset, [train_size, eval_size], generator=torch.Generator().manual_seed(42)
     )
+    print(f"Training dataset size: {len(train_dataset)}, Evaluation dataset size: {len(eval_dataset)}")
+    safe_num_workers = get_safe_num_workers(opt.num_workers)
     train_dataloader = DataLoader(
-        dataset=train_dataset, batch_size=opt.batch_size, shuffle=True, pin_memory=opt.pin_memory, num_workers=opt.num_workers
+        dataset=train_dataset, batch_size=opt.batch_size, shuffle=True, pin_memory=opt.pin_memory, num_workers=safe_num_workers
     )
     eval_dataloader = DataLoader(
-        dataset=eval_dataset, batch_size=opt.batch_size, shuffle=False, pin_memory=opt.pin_memory, num_workers=opt.num_workers
+        dataset=eval_dataset, batch_size=opt.batch_size, shuffle=False, pin_memory=opt.pin_memory, num_workers=safe_num_workers
     )
-
+    print(f"Training dataloader batches: {len(train_dataloader)}, Evaluation dataloader batches: {len(eval_dataloader)}")
     generator_optimizer = torch.optim.RMSprop(
         itertools.chain(generator.parameters(), conditioner.parameters()), lr=opt.learning_rate
     )
     discriminator_optimizer = torch.optim.RMSprop(
         discriminator.parameters(), lr=opt.learning_rate
     )
-
+    
     checkpoints = train(
         generator,
         conditioner,
@@ -105,7 +110,7 @@ def run_training(opt: Opt) -> None:
         opt,
         device
     )
-    
+    print(f"Training completed for genre '{opt.genre}'. Checkpoints saved locally at {opt.checkpoint_dir}.")
     datestamp = time.strftime("%Y%m%d-%H%M%S")
     for checkpoint in checkpoints:
         upload_weight_to_gcs(
@@ -146,7 +151,7 @@ def stage_dataset(stage_dir: Path, dataset_prefix: str, bucket_name: str) -> Pat
             midi_blob.download_to_filename(destination)
         else:
             LOGGER.warning("MIDI file not found at gs://%s/%s", bucket_name, blob_name)
-
+    print(f"Staged {len(metadata.get('files', []))} MIDI files to {stage_dir / dataset_prefix}")
     with metadata_path.open("w") as metadata_file:
         json.dump(metadata, metadata_file)
         
