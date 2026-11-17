@@ -29,6 +29,43 @@ export default function App() {
 
   const synthsRef = useRef([]);
   const transportStopRef = useRef(null);
+  const samplerRef = useRef(null);
+
+  // Pre-load drum sample buffers in the background when the app mounts
+  useEffect(() => {
+    samplerRef.current = new Tone.Sampler({
+      urls: DRUM_SAMPLES,
+      onload: () => {
+        console.log('All drum samples pre-loaded and cached.');
+      }
+    }).toDestination();
+
+    return () => {
+      samplerRef.current?.dispose();
+    };
+  }, []);
+
+  // Add this inside your App component
+useEffect(() => {
+  if (!loading) return undefined;
+
+  const steps = [
+    'Connecting to the backend and preparing the model...',
+    'Creating a new drum beat...',
+    'Synthesizing drum patterns and bar structures...',
+    'Prepping MIDI file for download...'
+  ];
+
+  let stepIndex = 0;
+  setStatusMessage(steps[stepIndex]);
+
+  const interval = setInterval(() => {
+    stepIndex = (stepIndex + 1) % steps.length;
+    setStatusMessage(steps[stepIndex]);
+  }, 1800);
+
+  return () => clearInterval(interval);
+}, [loading]);
 
   useEffect(() => {
     Tone.Transport.bpm.value = bpm;
@@ -56,7 +93,6 @@ export default function App() {
       return;
     }
     setLoading(true);
-    setStatusMessage('Running model inference and prepping MIDI File for download...');
 
     try {
       const cleanedFilename = midiFilename.replace(/\s+/g, '_').trim();
@@ -160,12 +196,10 @@ export default function App() {
     await Tone.start();
 
     if (isPlaying) {
-      // If already playing, stop the transport and dispose of synths
       Tone.Transport.stop();
       Tone.Transport.cancel();
       transportStopRef.current?.();
     } else {
-
       if (!midiData || midiData.tracks.length === 0) {
         console.error("No MIDI notes available to play.");
         return;
@@ -173,34 +207,31 @@ export default function App() {
 
       setIsPlaying(true);
       Tone.Transport.cancel();
+      
       const handleTransportStop = () => {
         Tone.Transport.off('stop', handleTransportStop);
         transportStopRef.current = null;
-
         setIsPlaying(false);
         setPlaybackPosition(0);
-        synthsRef.current.forEach(synth => synth.dispose());
-        synthsRef.current = [];
+        samplerRef.current?.releaseAll();
       };
       transportStopRef.current = handleTransportStop;
       Tone.Transport.on('stop', handleTransportStop);
 
-      const sampler = new Tone.Sampler({ urls: DRUM_SAMPLES }).toDestination();
-      synthsRef.current.push(sampler);
-
       try {
+        // Awaits buffer completion if background download is still in progress
         await Tone.loaded();
       } catch (error) {
         Tone.Transport.cancel();
         Tone.Transport.off('stop', handleTransportStop);
         transportStopRef.current = null;
-        sampler.dispose();
-        synthsRef.current = [];
         setIsPlaying(false);
         console.error('Unable to load drum samples.', error);
         return;
       }
-      
+
+      const sampler = samplerRef.current;
+
       midiData.tracks.forEach(track => {
         track.notes.forEach(note => {
           if (!Object.hasOwn(DRUM_SAMPLES, note.name)) {

@@ -5,19 +5,56 @@ import time
 from tqdm import tqdm # type: ignore
 import time
 from typing import Any
+from pathlib import Path
 from .losses import standard_gan_loss, feature_matching_loss
 
+class Opt(object):
+    """
+    A simple class to hold hyperparameters and configuration options for training and generation.
+    Modify the attributes as needed for your training and generation tasks.
+    Beware that changing certain parameters may affect the stability and performance of the model, so adjust with caution.
+    """
+    metadata_path: Path
+    checkpoint_dir: Path
+    genre: str = "all" # DO NOT MODIFY The musical genre to train or generate for.
+    epochs: int = 25 # Number of training epochs.
+    batch_size: int = 32 # Size of the mini-batch for training.
+    learning_rate:float = 2e-4 #0.0001 # Learning rate for the optimizers.
+    latent_dim: int = 100 # Dimension of the latent space vector for the generator.
+    min_pitch: int = 22 # DO NOT MODIFY Minimum MIDI pitch to consider in the dataset.
+    max_pitch: int = 59 # DO NOT MODIFY Maximum MIDI pitch to consider in the dataset.
+    w: int = 16 # DO NOT MODIFY Width of a single musical bar in time steps.
+    lambda_1: float = 0.01 # DO NOT MODIFY Weight for the raw data feature matching loss.
+    lambda_2: float = 0.1 # DO NOT MODIFY Weight for the discriminator feature matching loss.
+    pin_memory: bool = False # Whether to pin memory for DataLoader. When using CUDA, set this to True for faster data transfer to GPU.
+    num_workers: int = 4 # Number of worker processes for data loading.
+    fine_tuned: bool = False # Whether to fine-tune from existing weights. If True, the model will attempt to load pre-trained weights from the specified GCS bucket for the given genre. If False, training will start from scratch.
+    bucket_name_model_weights: str = "your-default-model-weights-bucket" # The GCS bucket name where pre-trained model weights are stored. Modify this to point to your actual bucket if you have pre-trained weights available.
+    bucket_name_training_data: str = "your-default-training-data-bucket" # The GCS bucket name where training data is stored. Modify this to point to your actual bucket if you have training data available.
+    dev: bool = False # Whether to run in development mode. In development mode, the application may use different configurations or logging settings. Set this to True for local testing and debugging, and False for production deployment.
+    local_checkpoint_dir: str = "/tmp" # Local directory to store checkpoints during training. Modify this if you want to change the default temporary storage location.
+    wandb_mode: str = "offline" # Mode for Weights & Biases logging. Set to "online" to log to the W&B cloud, or "offline" to log locally without internet access.
+    
 def train(
     generator, conditioner, discriminator,
     train_dataloader, val_dataloader,
     generator_optimizer, discriminator_optimizer,
     opt, device
 ):
+    # opt = {
+    #     "epochs": epochs,
+    #     "lambda_1": lambda_1,
+    #     "lambda_2": lambda_2,
+    #     "genre": genre,
+    #     "min_pitch": min_pitch,
+    #     "max_pitch": max_pitch,
+    #     "w": w,
+    #     "latent_dim": latent_dim,
+    # }
     checkpoints = []
     os.makedirs("/tmp/checkpoints", exist_ok=True)
     best_val_g_fm = float('inf')
     train_start_time = time.time()
-    epochs = opt.epochs
 
     if len(train_dataloader) == 0:
         raise ValueError("Training dataloader is empty; no training batches were produced.")
@@ -31,12 +68,12 @@ def train(
     run: Any = wandb_init(
         entity="jof3",
         project="drumbeat-generator",
-        mode=os.getenv("WANDB_MODE", "offline"),
+        mode=opt.wandb_mode if hasattr(opt, "wandb_mode") else "offline",
         config={
-            "learning_rate": opt.lr,
+            "learning_rate": opt.learning_rate,
             "architecture": "GAN with Conditioner",
             "dataset": "Apple Loops",
-            "epochs": epochs,
+            "epochs": opt.epochs,
         },
     )
 
@@ -44,8 +81,8 @@ def train(
     G_loss_bce = torch.zeros((), device=device)
     G_loss_fm = torch.zeros((), device=device)
  
-    for epoch_num in range(epochs):
-        batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{epochs}", unit="batch", leave=False)
+    for epoch_num in range(opt.epochs):
+        batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
         
         previous_bars = {} 
          
@@ -138,7 +175,7 @@ def train(
         val_steps = 0
 
         with torch.no_grad():
-            val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{epochs}", unit="batch", leave=False)
+            val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
             pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
             validation_previous_bars = {}
             for val_item in val_pbar:
@@ -210,7 +247,7 @@ def train(
                 "config": {
                     "latent_dim": opt.latent_dim,
                     "batch_size": opt.batch_size,
-                    "lr": opt.lr,
+                    "lr": opt.learning_rate,
                     "min_pitch": opt.min_pitch,
                     "max_pitch": opt.max_pitch,
                     "w": opt.w,
