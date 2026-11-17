@@ -305,6 +305,7 @@ def catch_all(path: str):
 
 if __name__ == "__main__":
     if DEV:
-        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5002")), debug=True)
+        port = int(os.getenv("PORT", "5002"))
     else:
-        app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")), debug=False)
+        port = int(os.getenv("PORT", "8080"))
+    app.run(host="0.0.0.0", port=port, debug=DEV)

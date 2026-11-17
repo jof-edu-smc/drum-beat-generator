@@ -43,7 +43,6 @@ def _parse_midi_data(data: bytes, info: AppleLoopInfo) -> None:
     """Parse an embedded MIDI file and update ``info`` with its properties."""
     if len(data) < 14 or data[:4] != b'MThd':
         return
-    # print(f"Processing MIDI data: {len(data)} bytes")
 
     header_length = struct.unpack('>I', data[4:8])[0]
     if header_length < 6 or 8 + header_length > len(data):
@@ -177,16 +176,14 @@ def parse_caf_metadata(input_file_path, output_file_dir):
         output_file_dir (str | Path): Directory in which to write the MIDI file.
 
     Returns:
-        tuple[int, str | None, str | None, str | None]:
-            Metadata-found flag, genre, instrument, and MIDI output path.
+        tuple[str | None, str | None, int | None, str | None, str | None]:
+            genre, drums, tempo, time_signature, and MIDI output relative path.
     """
     input_path = Path(input_file_path)
     data = input_path.read_bytes()
     if data[:4] == b'FORM' and data[8:12] not in (b'AIFF', b'AIFC'):
-        # print(f"Not a valid CAF or AIFF file: {input_path}")
         return None, None, None, None, None
     if data[:4] != b'caff' and data[:4] != b'FORM':
-        # print(f"Not a valid CAF or AIFF file: {input_path}")
         return None, None, None, None, None
 
     strings = ''.join(chr(byte) if 32 <= byte < 127 else '.' for byte in data)
@@ -201,24 +198,23 @@ def parse_caf_metadata(input_file_path, output_file_dir):
         midi_output_path = None
         if midi_data is not None:
             output_dir = Path(output_file_dir)
+            # print(f"Extracted MIDI from {input_path} to {output_dir} ({len(midi_data)} bytes)")
             output_dir.mkdir(parents=True, exist_ok=True)
             midi_output = output_dir / f'{input_path.stem}.mid'
             midi_output.write_bytes(midi_data)
-            midi_output_path = str(midi_output)
+            
+            # Store path relative to app_root so full computer paths aren't saved
+            midi_output_path = str(midi_output.relative_to(app_root))
+            
             midi_info = AppleLoopInfo()
             _parse_midi_data(midi_data, midi_info)
-            # print(
-            #     f"Extracted MIDI from {input_path} to {midi_output} "
-            #     f"({midi_info.midi.notes} notes, {midi_info.midi.tempo} BPM)"
-            # )
             # print(f"Found drum loop metadata for file: {input_path} | Genre: {genre} | Drums: {drums} | MIDI output: {midi_output_path}")
+            
             return genre, drums, midi_info.midi.tempo, midi_info.midi.time_signature, midi_output_path
-        # print(f"Found drum loop metadata for file: {input_path} | Genre: {genre} | Drums: {drums}, but no MIDI data found.")
         return genre, drums, None, None, None
     return None, None, None, None, None
 
-# Walk through the directory and rebuild the same folder structure in the app directory
-# Then run aif_to_mid.v1.py on the files from the Apple Loops directory to the corresponding directory in the app
+# Walk through the directory structure
 metadata = {
     'list_of_genres': [],
     'files': []
@@ -226,15 +222,16 @@ metadata = {
 
 for root, dirs, files in os.walk(apple_loop_dir):
     for dir in tqdm(dirs, desc=f"Processing directories in {root}", unit="dir"):
-        # Create the same directory structure in the app directory
         old_dir = Path(root) / dir
         new_dir = app_root / Path(root).relative_to(apple_loop_dir) / dir
-        new_dir.mkdir(parents=True, exist_ok=True)
+        
+        # NOTE: new_dir.mkdir() has been removed here. 
+        # It will now only be created inside parse_caf_metadata if a valid drum file is found.
         
         for file in os.listdir(old_dir):
             if file.endswith('.aif') or file.endswith('.aiff') or file.endswith('.caf'):
                 old_file_path = old_dir / file
-                # For example: subprocess.run(['python', 'aif_to_mid.v1.py', str(old_file_path), str(new_file_path)])
+                # print(f"Processing file: {old_file_path} to {new_dir}")
                 genre, drums, tempo, time_signature, midi_path = parse_caf_metadata(old_file_path, new_dir)
                 if midi_path is not None and genre is not None and drums is not None:
                     if genre == '':
@@ -249,25 +246,31 @@ for root, dirs, files in os.walk(apple_loop_dir):
                         })
                         if genre not in metadata['list_of_genres']:
                             metadata['list_of_genres'].append(genre)
-                    else:
-                        # print(f"Non-drum entry found for {old_file_path}. Skipping metadata entry.")
-                        pass
-                else:
-                    # print(f"No MIDI data found for {old_file_path}. Skipping metadata entry.")
-                    pass
-# write metadata.json to the app directory
-print("=" * 50)
-print(len(metadata['files']), "unique drum loop metadata entries found.")
-# Print number of duplicates found in the metadata['files'] list
+
+# Write summative statistics about the dataset to a text file
+stats_file_path = app_root / 'dataset_stats.txt'
+with open(stats_file_path, 'w') as stats_file:
+    stats_file.write(f"Total unique drum loop metadata entries: {len(metadata['files'])}\n")
+    stats_file.write(f"Total unique genres: {len(metadata['list_of_genres'])}\n")
+    stats_file.write("List of genres:\n")
+    for genre in sorted(metadata['list_of_genres']):
+        # Write the genre and the count of files associated with that genre
+        genre_count = sum(1 for entry in metadata['files'] if entry['genre'] == genre)
+        stats_file.write(f"- {genre} - {genre_count}\n")
+print(f"Dataset statistics written to {stats_file_path}")
+
+# Check for duplicate entries
 seen = set()
 duplicates = 0
 for entry in metadata['files']:
-    entry_tuple = (entry['midi_path'])
+    entry_tuple = entry['midi_path']
     if entry_tuple in seen:
         duplicates += 1
     else:
         seen.add(entry_tuple)
 print(duplicates, "duplicate entries found in metadata.")
+
+# Write metadata.json
 metadata_file_path = app_root / 'metadata.json'
 with open(metadata_file_path, 'w') as f:
     json.dump(metadata, f, indent=4)
