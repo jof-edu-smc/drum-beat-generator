@@ -1,0 +1,18 @@
+Total unique drum loop metadata entries: 1552
+Total unique genres: 15
+List of genres:
+- Country/Folk
+- Dubstep
+- Electro House
+- Electronic/Dance
+- Funk
+- Hip Hop
+- Indie
+- Jazz
+- Modern RnB
+- Orchestral
+- Other Genre
+- Rock/Blues
+- Tech House
+- Urban
+- World/Ethnic

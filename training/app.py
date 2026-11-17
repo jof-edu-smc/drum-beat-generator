@@ -7,7 +7,7 @@ import os
 import tempfile
 from pathlib import Path
 
-import numpy as np # type: ignore
+import torch.multiprocessing as mp # type: ignore
 from flask import Flask, jsonify, request # type: ignore
 from dotenv import load_dotenv # type: ignore
 
@@ -59,9 +59,10 @@ def trigger_training():
             "status": "error", 
             "message": f"Missing required payload parameters: {', '.join(missing_keys)}"
         }), 400
-
-    try:
-        opt = Opt()
+    
+    opt = Opt()
+    
+    try:    
         opt.genre = str(payload["genre"])
         opt.epochs = int(payload["epochs"])
         opt.batch_size = int(payload["batch_size"])
@@ -113,8 +114,14 @@ def trigger_training():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
+    try:
+        mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass 
+    
     if DEV:
         port = int(os.environ.get("PORT", 5002))
     else: 
         port = int(os.environ.get("PORT", 8080))
+        
     app.run(host="0.0.0.0", port=port, debug=DEV)
