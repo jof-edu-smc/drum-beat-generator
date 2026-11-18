@@ -3,7 +3,6 @@ import json
 import random
 import logging
 import itertools
-import time
 import numpy as np # type: ignore
 import torch # type: ignore
 from torch.utils.data import DataLoader # type: ignore
@@ -113,11 +112,17 @@ def run_training(opt: Opt) -> None:
         device
     )
     print(f"Training completed for genre '{opt.genre}'. Checkpoints saved locally at {opt.checkpoint_dir}.")
-    datestamp = time.strftime("%Y%m%d-%H%M%S")
+    
+    # all_e21_101585_20261118-142115.pth 
     for checkpoint in checkpoints:
+        ckpt_info = checkpoint.split("_") 
+        # ckpt_genre = ckpt_info[0]
+        ckpt_epoch = ckpt_info[1]
+        ckpt_fm_tag = ckpt_info[2]
+        ckpt_timestamp = ckpt_info[3].split(".")[0]
         upload_weight_to_gcs(
             checkpoint,
-            f"{opt.genre}/model_weights_{datestamp}.pth",
+            f"{opt.genre}/model_weights_{ckpt_epoch}_{ckpt_fm_tag}_{ckpt_timestamp}.pth",
             opt.bucket_name_model_weights
         )
     if not any(Path(opt.checkpoint_dir).glob(f"{opt.genre}*.pth")):
