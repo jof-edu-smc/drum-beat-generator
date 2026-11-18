@@ -81,7 +81,7 @@ def train(
     G_loss_bce = torch.zeros((), device=device)
     G_loss_fm = torch.zeros((), device=device)
     
-    print(f"Starting training for genre '{opt.genre}' with {opt.epochs} epochs, batch size {opt.batch_size}, learning rate {opt.learning_rate}, latent dimension {opt.latent_dim}, pitch range [{opt.min_pitch}, {opt.max_pitch}], and w={opt.w}.")
+    print(f"Starting training on {device} for genre '{opt.genre}' with {opt.epochs} epochs, batch size {opt.batch_size}, learning rate {opt.learning_rate}, latent dimension {opt.latent_dim}, pitch range [{opt.min_pitch}, {opt.max_pitch}], and w={opt.w}.")
     
     for epoch_num in range(opt.epochs):
         batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
@@ -263,7 +263,7 @@ def train(
             print(f"New best model found at epoch {epoch_num + 1} with val G_fm: {val_g_fm:.4f}. Saving checkpoint at {datestamp}.")
             if val_g_fm < best_val_g_fm:
                 best_val_g_fm = val_g_fm
-            checkpoint_path = os.path.join("/tmp/checkpoints", f"{opt.genre}_e{epoch_num + 1}_{fm_tag}_{datestamp}.pth")
+            checkpoint_path = os.path.join(opt.checkpoint_dir, f"{opt.genre}_e{epoch_num + 1}_{fm_tag}_{datestamp}.pth")
             torch.save(checkpoint, checkpoint_path)
             checkpoints.append(checkpoint_path)
 
