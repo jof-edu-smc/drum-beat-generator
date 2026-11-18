@@ -27,45 +27,36 @@ export default function App() {
   const [authToken, setAuthToken] = useState('');
   const [user, setUser] = useState(null);
 
-  const synthsRef = useRef([]);
   const transportStopRef = useRef(null);
   const samplerRef = useRef(null);
 
-  // Pre-load drum sample buffers in the background when the app mounts
+  // Clean up sampler reference on unmount
   useEffect(() => {
-    samplerRef.current = new Tone.Sampler({
-      urls: DRUM_SAMPLES,
-      onload: () => {
-        console.log('All drum samples pre-loaded and cached.');
-      }
-    }).toDestination();
-
     return () => {
       samplerRef.current?.dispose();
     };
   }, []);
 
-  // Add this inside your App component
-useEffect(() => {
-  if (!loading) return undefined;
+  useEffect(() => {
+    if (!loading) return undefined;
 
-  const steps = [
-    'Connecting to the backend and preparing the model...',
-    'Creating a new drum beat...',
-    'Synthesizing drum patterns and bar structures...',
-    'Prepping MIDI file for download...'
-  ];
+    const steps = [
+      'Connecting to the backend and preparing the model...',
+      'Creating a new drum beat...',
+      'Synthesizing drum patterns and bar structures...',
+      'Prepping MIDI file for download...'
+    ];
 
-  let stepIndex = 0;
-  setStatusMessage(steps[stepIndex]);
-
-  const interval = setInterval(() => {
-    stepIndex = (stepIndex + 1) % steps.length;
+    let stepIndex = 0;
     setStatusMessage(steps[stepIndex]);
-  }, 1800);
 
-  return () => clearInterval(interval);
-}, [loading]);
+    const interval = setInterval(() => {
+      stepIndex = (stepIndex + 1) % steps.length;
+      setStatusMessage(steps[stepIndex]);
+    }, 1800);
+
+    return () => clearInterval(interval);
+  }, [loading]);
 
   useEffect(() => {
     Tone.Transport.bpm.value = bpm;
@@ -193,79 +184,94 @@ useEffect(() => {
   };
 
   const togglePlay = async () => {
-  await Tone.start();
+    // 1. Unlock browser audio context via user interaction
+    await Tone.start();
 
-  if (isPlaying) {
-    Tone.Transport.stop();
-    Tone.Transport.cancel();
-    transportStopRef.current?.();
-  } else {
-    if (!midiData || midiData.tracks.length === 0) {
-      console.error("No MIDI notes available to play.");
-      return;
-    }
+    if (isPlaying) {
+      Tone.Transport.stop();
+      Tone.Transport.cancel();
+      transportStopRef.current?.();
+    } else {
+      if (!midiData || midiData.tracks.length === 0) {
+        console.error("No MIDI notes available to play.");
+        return;
+      }
 
-    // 1. Ensure sampler reference exists and buffers are loaded before changing state
-    const sampler = samplerRef.current;
-    if (!sampler) {
-      console.error("Sampler instance is not initialized.");
-      return;
-    }
-
-    try {
-      await Tone.loaded();
-    } catch (error) {
-      console.error('Unable to load drum samples.', error);
-      return;
-    }
-
-    setIsPlaying(true);
-    Tone.Transport.cancel();
-    
-    const handleTransportStop = () => {
-      Tone.Transport.off('stop', handleTransportStop);
-      transportStopRef.current = null;
-      setIsPlaying(false);
-      setPlaybackPosition(0);
-      sampler.releaseAll();
-    };
-    transportStopRef.current = handleTransportStop;
-    Tone.Transport.on('stop', handleTransportStop);
-
-    // 2. Schedule notes using the exact `time` argument passed by the Transport
-    midiData.tracks.forEach(track => {
-      track.notes.forEach(note => {
-        if (!Object.hasOwn(DRUM_SAMPLES, note.name)) {
-          console.warn(`Skipping unsupported drum note: ${note.name} (MIDI ${note.midi})`);
+      // 2. Lazily initialize the sampler on first play to avoid premature fetching & 404s
+      if (!samplerRef.current) {
+        try {
+          samplerRef.current = new Tone.Sampler({
+            urls: DRUM_SAMPLES,
+            baseUrl: `${API_BASE_URL}/api/sampler/`,
+            onload: () => {
+              console.log('Drum samples successfully loaded via backend proxy.');
+            }
+          }).toDestination();
+        } catch (err) {
+          console.error('Failed to initialize Tone.Sampler:', err);
           return;
         }
+      }
 
-        const beatPosition = note.time * 2;
-        const bar = Math.floor(beatPosition / 4);
-        const beat = Math.floor(beatPosition % 4);
-        const sixteenth = Math.round((beatPosition % 1) * 4);
+      const sampler = samplerRef.current;
+      if (!sampler) {
+        console.error("Sampler instance is not initialized.");
+        return;
+      }
 
-        Tone.Transport.schedule((time) => {
-          // Note: Avoid mutating sampler.attack/release globally inside the callback.
-          // If envelopes must be dynamic per note, configure them in your Tone.Sampler initial declaration.
-          sampler.triggerAttackRelease(
-            note.name,
-            note.duration * (120 / bpm),
-            time, // Use the scheduled audio context time passed into the callback
-            note.velocity
-          );
-        }, `${bar}:${beat}:${sixteenth}`);
+      try {
+        // 3. Await completion of background sample downloads
+        await Tone.loaded();
+      } catch (error) {
+        console.error('Unable to load drum samples.', error);
+        return;
+      }
+
+      setIsPlaying(true);
+      Tone.Transport.cancel();
+      
+      const handleTransportStop = () => {
+        Tone.Transport.off('stop', handleTransportStop);
+        transportStopRef.current = null;
+        setIsPlaying(false);
+        setPlaybackPosition(0);
+        sampler.releaseAll();
+      };
+      transportStopRef.current = handleTransportStop;
+      Tone.Transport.on('stop', handleTransportStop);
+
+      // 4. Schedule notes accurately using the Transport callback time
+      midiData.tracks.forEach(track => {
+        track.notes.forEach(note => {
+          if (!Object.hasOwn(DRUM_SAMPLES, note.name)) {
+            console.warn(`Skipping unsupported drum note: ${note.name} (MIDI ${note.midi})`);
+            return;
+          }
+
+          const beatPosition = note.time * 2;
+          const bar = Math.floor(beatPosition / 4);
+          const beat = Math.floor(beatPosition % 4);
+          const sixteenth = Math.round((beatPosition % 1) * 4);
+
+          Tone.Transport.schedule((time) => {
+            sampler.triggerAttackRelease(
+              note.name,
+              note.duration * (120 / bpm),
+              time,
+              note.velocity
+            );
+          }, `${bar}:${beat}:${sixteenth}`);
+        });
       });
-    });
 
-    const duration = midiData.duration + 1;
-    Tone.Transport.scheduleOnce(() => {
-      Tone.Transport.stop();
-    }, duration * (MIDI_SOURCE_BPM / bpm));
-    
-    Tone.Transport.start();
-  }
-};
+      const duration = midiData.duration + 1;
+      Tone.Transport.scheduleOnce(() => {
+        Tone.Transport.stop();
+      }, duration * (MIDI_SOURCE_BPM / bpm));
+      
+      Tone.Transport.start();
+    }
+  };
 
   const handleDownload = () => {
     if (midiUrl) {
