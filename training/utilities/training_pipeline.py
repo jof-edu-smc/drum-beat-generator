@@ -21,6 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 def upload_weight_to_gcs(local_path, destination_blob_name, bucket_name):
     """Uploads a trained model checkpoint to the model weights GCS bucket."""
+    print(f"Uploading {local_path} to gs://{bucket_name}/{destination_blob_name}")
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
@@ -30,6 +31,7 @@ def upload_weight_to_gcs(local_path, destination_blob_name, bucket_name):
 
 def download_weight_from_gcs(source_blob_name, local_path, bucket_name):
     """Downloads an existing model checkpoint from the model weights GCS bucket for fine-tuning."""
+    print(f"Attempting to download weights from gs://{bucket_name}/{source_blob_name} to {local_path}")
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(source_blob_name)
