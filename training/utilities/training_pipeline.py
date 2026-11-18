@@ -113,20 +113,22 @@ def run_training(opt: Opt) -> None:
     )
     print(f"Training completed for genre '{opt.genre}'. Checkpoints saved locally at {opt.checkpoint_dir}.")
     
-    # all_e21_101585_20261118-142115.pth 
-    for checkpoint in checkpoints:
-        ckpt_info = checkpoint.split("_") 
-        # ckpt_genre = ckpt_info[0]
-        ckpt_epoch = ckpt_info[1]
-        ckpt_fm_tag = ckpt_info[2]
-        ckpt_timestamp = ckpt_info[3].split(".")[0]
-        upload_weight_to_gcs(
-            checkpoint,
-            f"{opt.genre}/model_weights_{ckpt_epoch}_{ckpt_fm_tag}_{ckpt_timestamp}.pth",
-            opt.bucket_name_model_weights
-        )
-    if not any(Path(opt.checkpoint_dir).glob(f"{opt.genre}*.pth")):
-        raise FileNotFoundError("Training completed without producing a checkpoint.")
+    try:
+        # all_e21_101585_20261118-142115.pth 
+        for checkpoint in checkpoints:
+            ckpt_info = checkpoint.split("_") 
+            # ckpt_genre = ckpt_info[0]
+            ckpt_epoch = ckpt_info[1]
+            ckpt_fm_tag = ckpt_info[2]
+            ckpt_timestamp = ckpt_info[3].split(".")[0]
+            upload_weight_to_gcs(
+                checkpoint,
+                f"{opt.genre}/model_weights_{ckpt_epoch}_{ckpt_fm_tag}_{ckpt_timestamp}.pth",
+                opt.bucket_name_model_weights
+            )
+    except Exception as e:
+        LOGGER.error("Error uploading checkpoints to GCS: %s", e)
+        raise 
 
 def stage_dataset(stage_dir: Path, dataset_prefix: str, bucket_name: str) -> Path:
     """Download metadata.json and referenced MIDI files from the training data bucket using metadata.json as a guide, and stage them in a temporary directory for training."""

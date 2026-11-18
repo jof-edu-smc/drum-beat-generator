@@ -15,8 +15,9 @@ steps:
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     args:
       - run
-      - deploy
-      - training-service
+      - jobs
+      - update
+      - training-job
       - '--image=gcr.io/$PROJECT_ID/github.com/jof-edu-smc/training:$COMMIT_SHA'
       - '--region=us-east4'
       - '--cpu=4'
@@ -24,8 +25,7 @@ steps:
       - '--gpu=1'
       - '--gpu-type=nvidia-l4'
       - '--no-gpu-zonal-redundancy'
-      - '--set-env-vars=WANDB_MODE=$_WANDB_MODE,MODEL_WEIGHTS_BUCKET=$_MODEL_WEIGHTS_BUCKET,TRAINING_DATA_BUCKET=$_TRAINING_DATA_BUCKET,MIDI_PREFIX=$_MIDI_PREFIX'
-      - '--set-secrets=WANDB_API_KEY=weights_and_biases_secret:latest,TRAINING_API_KEY=drumbeat_beat_backend_api_key_secret:latest'
+      - '--set-secrets=WANDB_API_KEY=weights_and_biases_secret:latest'
     entrypoint: gcloud
 timeout: 1200s
 images:

@@ -23,4 +23,4 @@ COPY utilities/ ./utilities/
 EXPOSE 8080
 
 # Run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "120", "app:app"]
+CMD ["python", "app.py"]

@@ -1,7 +1,7 @@
 export const GENRES = [
   "All", "Country", "Dubstep", "Electro House", "Electronic", "Funk", 
-  "Hip Hop", "Indie", "Jazz", "Modern RnB", "Orchestral", "Other", 
-  "Rock", "Tech House", "Urban",  "World/Ethnic"
+  "Hip Hop", "Indie", "Jazz", "Modern RnB", "Orchestral", "Other Genre", 
+  "Rock", "Tech House", "Urban",  "World"
 ];
 
 const DEFAULT_ENVELOPE = {
