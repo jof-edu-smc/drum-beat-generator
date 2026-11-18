@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 import torch.multiprocessing as mp # type: ignore
-from flask import Flask, jsonify, request # type: ignore
 from dotenv import load_dotenv # type: ignore
 
 from utilities.training_gan import Opt
@@ -18,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 load_dotenv()
 
-app = Flask(__name__)
 
 # Only the 4 requested environment variables are read here
 TRAINING_DATA_BUCKET = os.getenv("TRAINING_DATA_BUCKET", "your-default-training-data-bucket")
@@ -29,70 +27,67 @@ DEV = bool(os.getenv("DEV", "False"))
 LOCAL_CHECKPOINT_DIR = f"/tmp/{TRAINING_DATA_BUCKET}"
 os.makedirs(LOCAL_CHECKPOINT_DIR, exist_ok=True)
 
-@app.route("/", methods=["GET"])
-def health_check():
-    """Cloud Run health check endpoint."""
-    return jsonify({"status": "healthy", "service": "training-service"}), 200
 
-@app.route("/train", methods=["POST"])
 def trigger_training():
-    """API endpoint triggered by Google Cloud Scheduler with TRAINING_API_KEY validation."""
-    expected_api_key = os.getenv("TRAINING_API_KEY")
-    if expected_api_key:
-        auth_header = request.headers.get("X-Training-Api-Key", "")
-        if auth_header != expected_api_key:
-            return jsonify({"error": "Unauthorized API key"}), 401
-
-    payload = request.get_json(silent=True)
-    if not payload:
-        return jsonify({"status": "error", "message": "Missing or invalid JSON payload"}), 400
-
+    keys_for_training = {
+        "genre": os.getenv("GENRE", ""), 
+        "epochs": os.getenv("EPOCHS", ""), 
+        "batch_size": os.getenv("BATCH_SIZE", ""),
+        "learning_rate": os.getenv("LEARNING_RATE", ""), 
+        "latent_dim": os.getenv("LATENT_DIM", ""), 
+        "min_pitch": os.getenv("MIN_PITCH", ""), 
+        "max_pitch": os.getenv("MAX_PITCH", ""), 
+        "w": os.getenv("W", ""), 
+        "num_workers": os.getenv("NUM_WORKERS", ""), 
+        "lambda_1": os.getenv("LAMBDA_1", ""), 
+        "lambda_2": os.getenv("LAMBDA_2", ""), 
+        "pin_memory": os.getenv("PIN_MEMORY", ""), 
+        "fine_tune": os.getenv("FINE_TUNE", ""), 
+        "dataset": os.getenv("DATASET", ""),
+    }
     required_keys = [
         "genre", "epochs", "batch_size", "learning_rate", 
         "latent_dim", "min_pitch", "max_pitch", "w", 
         "lambda_1", "lambda_2", "pin_memory", "fine_tune", "num_workers", "dataset"
     ]
 
-    missing_keys = [key for key in required_keys if key not in payload]
+    missing_keys = [key for key in required_keys if key not in keys_for_training or not keys_for_training[key]]
     if missing_keys:
-        return jsonify({
-            "status": "error", 
-            "message": f"Missing required payload parameters: {', '.join(missing_keys)}"
-        }), 400
+        raise ValueError(f"Missing required keys in payload: {', '.join(missing_keys)}")
     
     opt = Opt()
     
     try:    
-        opt.genre = str(payload["genre"])
-        opt.epochs = int(payload["epochs"])
-        opt.batch_size = int(payload["batch_size"])
-        opt.learning_rate = float(payload["learning_rate"])
-        opt.latent_dim = int(payload["latent_dim"])
-        opt.min_pitch = int(payload["min_pitch"])
-        opt.max_pitch = int(payload["max_pitch"])
-        opt.w = int(payload["w"])
-        opt.lambda_1 = float(payload["lambda_1"])
-        opt.lambda_2 = float(payload["lambda_2"])
-        dataset_prefix = str(payload.get("dataset", ""))
+        opt.genre = keys_for_training["genre"]
+        opt.epochs = int(keys_for_training["epochs"])
+        opt.batch_size = int(keys_for_training["batch_size"])
+        opt.learning_rate = float(keys_for_training["learning_rate"])
+        opt.latent_dim = int(keys_for_training["latent_dim"])
+        opt.min_pitch = int(keys_for_training["min_pitch"])
+        opt.max_pitch = int(keys_for_training["max_pitch"])
+        opt.w = int(keys_for_training["w"])
+        opt.lambda_1 = float(keys_for_training["lambda_1"])
+        opt.lambda_2 = float(keys_for_training["lambda_2"])
+        opt.num_workers = int(keys_for_training["num_workers"])
+        dataset_prefix = str(keys_for_training.get("dataset", ""))
         opt.bucket_name_training_data = TRAINING_DATA_BUCKET
         opt.bucket_name_model_weights = MODEL_WEIGHTS_BUCKET
         opt.dev = DEV
         opt.local_checkpoint_dir = LOCAL_CHECKPOINT_DIR
         opt.wandb_mode = WANDB_MODE
         
-        pin_memory_raw = payload["pin_memory"]
+        pin_memory_raw = keys_for_training["pin_memory"]
         opt.pin_memory = pin_memory_raw if isinstance(pin_memory_raw, bool) else str(pin_memory_raw).lower() == "true"
 
-        fine_tune_raw = payload["fine_tune"]
+        fine_tune_raw = keys_for_training["fine_tune"]
         opt.fine_tuned = fine_tune_raw if isinstance(fine_tune_raw, bool) else str(fine_tune_raw).lower() == "true"
 
-        opt.num_workers = int(payload["num_workers"])
+        opt.num_workers = int(keys_for_training["num_workers"])
 
-    except (ValueError, TypeError) as e:
-        return jsonify({
-            "status": "error", 
-            "message": f"Parameter type validation failed: {str(e)}"
-        }), 400
+    except ValueError as e:
+        raise ValueError(f"Invalid value in payload: {e}")
+    except KeyError as e:
+        raise KeyError(f"Missing key in payload: {e}")
 
     try:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -102,26 +97,15 @@ def trigger_training():
             run_training(opt=opt)
             LOGGER.info("Successfully completed training for genre '%s' and uploaded checkpoints to bucket %s", opt.genre, MODEL_WEIGHTS_BUCKET)
             
-        return jsonify({
-            "status": "success", 
-            "message": "Training completed successfully", 
-            "genre": opt.genre,
-            "weights_bucket": MODEL_WEIGHTS_BUCKET
-        }), 200
+        LOGGER.info("Training job completed successfully for genre '%s'. Checkpoints saved locally at %s.", opt.genre, opt.checkpoint_dir)
 
     except Exception as e:
         LOGGER.exception("Training job failed with error: %s", str(e))
-        return jsonify({"status": "error", "message": str(e)}), 500
+        raise RuntimeError(f"Training job failed with error: {str(e)}")
 
 if __name__ == "__main__":
     try:
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
         pass 
-    
-    if DEV:
-        port = int(os.environ.get("PORT", 5002))
-    else: 
-        port = int(os.environ.get("PORT", 8080))
-        
-    app.run(host="0.0.0.0", port=port, debug=DEV)
+    trigger_training()
