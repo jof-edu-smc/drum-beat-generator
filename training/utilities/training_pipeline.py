@@ -71,7 +71,7 @@ def run_training(opt: Opt) -> None:
             discriminator.load_state_dict(checkpoint["discriminator_state_dict"])
         else: 
             raise FileNotFoundError(f"No pre-trained weights found for genre '{opt.genre}' at gs://{opt.bucket_name_model_weights}/{opt.genre}/model_weights_latest.pth")
-        
+    print("Initializing dataset and dataloaders...")
     dataset = DrumDataset(metadata_path=opt.metadata_path, genre_filter=opt.genre, device=device)
     if not dataset:
         raise ValueError(f"No data found for genre '{opt.genre}'.")

@@ -74,6 +74,16 @@ def train(
             "architecture": "GAN with Conditioner",
             "dataset": "Apple Loops",
             "epochs": opt.epochs,
+            "batch_size": opt.batch_size,
+            "latent_dim": opt.latent_dim,
+            "min_pitch": opt.min_pitch,
+            "max_pitch": opt.max_pitch,
+            "w": opt.w,
+            "lambda_1": opt.lambda_1,
+            "lambda_2": opt.lambda_2,
+            "name": f"{opt.genre}_GAN_training" if hasattr(opt, "genre") else "GAN_training",
+            "num_workers": opt.num_workers if hasattr(opt, "num_workers") else 4,
+            "pin_memory": opt.pin_memory if hasattr(opt, "pin_memory") else False,
         },
     )
 
