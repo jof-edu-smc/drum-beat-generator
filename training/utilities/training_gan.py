@@ -2,7 +2,6 @@ import os
 import torch # type: ignore
 import wandb # type: ignore
 import time
-from tqdm import tqdm # type: ignore
 import time
 from typing import Any
 from pathlib import Path
@@ -85,11 +84,11 @@ def train(
     print(f"Starting training on {device} for genre '{opt.genre}' with {opt.epochs} epochs, batch size {opt.batch_size}, learning rate {opt.learning_rate}, latent dimension {opt.latent_dim}, pitch range [{opt.min_pitch}, {opt.max_pitch}], and w={opt.w}.")
     
     for epoch_num in range(opt.epochs):
-        batch_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
+        print(f"Epoch {epoch_num + 1}/{opt.epochs}")
         
         previous_bars = {} 
          
-        for item in batch_pbar:
+        for item in train_dataloader:
             real_bar = item["bar"].to(device=device, dtype=torch.float32)
             genres = item["genre"]
 
@@ -161,11 +160,7 @@ def train(
                 G_total_loss.backward()  # Backprop combined loss for Generator
                 generator_optimizer.step()
 
-            batch_pbar.set_postfix({
-                "D_loss": f"{D_loss_standard.item():.4f}",
-                "G_bce": f"{G_loss_bce.item():.4f}",
-                "G_fm": f"{G_loss_fm.item():.4f}"
-            })
+            print(f"Epoch {epoch_num + 1}/{opt.epochs} - D_loss: {D_loss_standard.item():.4f}, G_bce: {G_loss_bce.item():.4f}, G_fm: {G_loss_fm.item():.4f}")
 
             
         generator.eval()
@@ -176,12 +171,13 @@ def train(
         val_g_bce = 0.0
         val_g_fm = 0.0
         val_steps = 0
+        print(f"Validation Epoch {epoch_num + 1}/{opt.epochs}")
 
         with torch.no_grad():
-            val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
+            # val_pbar = tqdm(val_dataloader, desc=f"Validation Epoch {epoch_num + 1}/{opt.epochs}", unit="batch", leave=False)
             pitch_slice = slice(opt.min_pitch, opt.max_pitch + 1)
             validation_previous_bars = {}
-            for val_item in val_pbar:
+            for val_item in val_dataloader:
                 val_real_bar = val_item["bar"].to(device=device, dtype=torch.float32)
                 val_genres = val_item["genre"]
                 val_condition_bar = torch.zeros_like(val_real_bar)
@@ -278,7 +274,6 @@ def train(
             "loss/generator": float(G_loss_bce.item()),
             "loss/feature_matching": float(G_loss_fm.item()),
             "epoch": epoch_num + 1,
-            "batch": batch_pbar.n
         })
 
     train_end_time = time.time()
