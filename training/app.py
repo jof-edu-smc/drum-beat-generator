@@ -109,3 +109,4 @@ if __name__ == "__main__":
     except RuntimeError:
         pass 
     trigger_training()
+    exit(0)

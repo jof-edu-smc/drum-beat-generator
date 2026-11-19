@@ -6,7 +6,6 @@ import numpy as np # type: ignore
 import hashlib
 import pretty_midi # type: ignore
 from torch.utils.data import Dataset # type: ignore
-from tqdm import tqdm # type: ignore 
 from pathlib import Path
 
 class DrumDataset(Dataset):
@@ -32,7 +31,7 @@ class DrumDataset(Dataset):
         self.dataset = [] 
         self.invalid_dataset = []  # To keep track of invalid MIDI files
         
-        for item in tqdm(self.metadata['files'], desc="Processing MIDI files", unit="file"):
+        for item in self.metadata['files']:
             midi_path = item['midi_path']
             if not os.path.isabs(midi_path):
                 midi_path = str(metadata_directory / midi_path)
