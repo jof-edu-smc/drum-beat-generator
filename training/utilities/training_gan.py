@@ -34,6 +34,7 @@ class Opt(object):
     dev: bool = False # Whether to run in development mode. In development mode, the application may use different configurations or logging settings. Set this to True for local testing and debugging, and False for production deployment.
     local_checkpoint_dir: str = "/tmp" # Local directory to store checkpoints during training. Modify this if you want to change the default temporary storage location.
     wandb_mode: str = "offline" # Mode for Weights & Biases logging. Set to "online" to log to the W&B cloud, or "offline" to log locally without internet access.
+    dataset: str = "" # The dataset to be used for training. Modify this to specify a particular dataset if needed. If left empty, the default dataset will be used.
     
 def train(
     generator, conditioner, discriminator,

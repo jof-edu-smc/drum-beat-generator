@@ -58,7 +58,7 @@ def trigger_training():
     opt = Opt()
     
     try:    
-        opt.genre = keys_for_training["genre"]
+        opt.genre = keys_for_training["genre"].lower()
         opt.epochs = int(keys_for_training["epochs"])
         opt.batch_size = int(keys_for_training["batch_size"])
         opt.learning_rate = float(keys_for_training["learning_rate"])
@@ -69,7 +69,7 @@ def trigger_training():
         opt.lambda_1 = float(keys_for_training["lambda_1"])
         opt.lambda_2 = float(keys_for_training["lambda_2"])
         opt.num_workers = int(keys_for_training["num_workers"])
-        dataset_prefix = str(keys_for_training.get("dataset", ""))
+        opt.dataset = str(keys_for_training.get("dataset", ""))
         opt.bucket_name_training_data = TRAINING_DATA_BUCKET
         opt.bucket_name_model_weights = MODEL_WEIGHTS_BUCKET
         opt.dev = DEV
@@ -92,7 +92,7 @@ def trigger_training():
     try:
         with tempfile.TemporaryDirectory() as temporary_directory:
             stage_dir = Path(temporary_directory) / "dataset"
-            opt.metadata_path = stage_dataset(stage_dir, dataset_prefix=dataset_prefix, bucket_name=TRAINING_DATA_BUCKET)
+            opt.metadata_path = stage_dataset(stage_dir, dataset_prefix=opt.dataset, bucket_name=TRAINING_DATA_BUCKET)
             opt.checkpoint_dir = Path(temporary_directory) 
             run_training(opt=opt)
             LOGGER.info("Successfully completed training for genre '%s' and uploaded checkpoints to bucket %s", opt.genre, MODEL_WEIGHTS_BUCKET)
