@@ -170,7 +170,7 @@ def train(
                 G_total_loss.backward()  # Backprop combined loss for Generator
                 generator_optimizer.step()
 
-            print(f"Epoch {epoch_num + 1}/{opt.epochs} - D_loss: {D_loss_standard.item():.4f}, G_bce: {G_loss_bce.item():.4f}, G_fm: {G_loss_fm.item():.4f}")
+        print(f"Epoch {epoch_num + 1}/{opt.epochs} - D_loss: {D_loss_standard.item():.4f}, G_bce: {G_loss_bce.item():.4f}, G_fm: {G_loss_fm.item():.4f}")
 
             
         generator.eval()
