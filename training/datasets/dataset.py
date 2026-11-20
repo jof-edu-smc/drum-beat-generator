@@ -18,14 +18,16 @@ class DrumDataset(Dataset):
         
         # Initialize the dataset with metadata and filter by genre if specified.
         self.metadata_path = metadata_path
-        self.device = device
-        self.genre = genre_filter
+        self.device = device 
+        self.genre = genre_filter.lower() if genre_filter != 'all' else 'all'
         self.available_genres = set()
+        
         with open(self.metadata_path, 'r') as f:
             self.metadata = json.load(f)
             if self.metadata is None:
                 raise ValueError(f"Metadata file {self.metadata_path} is empty or not properly formatted.")
-        
+            
+        print(f"Initializing DrumDataset with metadata from {self.metadata_path} and genre filter '{self.genre}' from {len(self.metadata['files'])} files.")
         self.available_genres = self.metadata.get('list_of_genres', [])
         metadata_directory = Path(self.metadata_path).resolve().parent
         self.dataset = [] 
@@ -33,18 +35,23 @@ class DrumDataset(Dataset):
         
         for item in self.metadata['files']:
             midi_path = item['midi_path']
-            if not os.path.isabs(midi_path):
+    
+            lowercase_genre = item['genre'].lower()
+            if not os.path.isabs(midi_path) and metadata_directory not in Path(midi_path).resolve().parents:
                 midi_path = str(metadata_directory / midi_path)
-            if genre_filter != 'all' and item['genre'] != genre_filter:
+                print(f"Resolved MIDI path: {midi_path}")
+            if self.genre != 'all' and self.genre not in lowercase_genre:
                 continue
             
             info = {
                 'bar': np.zeros((1, 128, 16), dtype=np.float32),  # Placeholder for the tensor
-                'genre': item['genre'],
+                'src_midi_file': midi_path,
+                'genre': lowercase_genre,
                 'drums': item['drums'],
                 'tempo': item.get('tempo', 120),
                 'time_signature': item.get('time_signature', '4/4'),
             }
+            
             
             if info['time_signature'] is None:
                 info['time_signature'] = '4/4' 
@@ -53,26 +60,30 @@ class DrumDataset(Dataset):
                 info['tempo'] = 120
                 
             try:
-                midi_data = pretty_midi.PrettyMIDI(midi_path)
-                total_duration = midi_data.get_end_time()
-                if total_duration < (60.0 / info['tempo']) * 4:  # Less than 1 bar at default tempo
-                    raise ValueError(f"Warning: MIDI file {midi_path} is too short for at least one bar. Skipping.")
+                # Commenting out since Dataset appends zeros to files too short to be processed, and this check is redundant with the process_midi_to_tensor_list method.
+                # midi_data = pretty_midi.PrettyMIDI(midi_path)
+                # total_duration = midi_data.get_end_time()
+                # if total_duration < (60.0 / info['tempo']) * 4:  # Less than 1 bar at default tempo
+                #     print(f"Warning: MIDI file {midi_path} is too short for at least one bar. Skipping.")
+                #     raise ValueError(f"Warning: MIDI file {midi_path} is too short for at least one bar. Skipping.")
                 
                 processed_bars = self.process_midi_to_tensor_list(midi_path, info)
                 
                 if not processed_bars or len(processed_bars) == 0:
+                    print(f"Warning: No valid bars were processed from MIDI file {midi_path}. Ensure the file contains drum notes and is long enough for at least one bar.")
                     raise ValueError(f"No valid bars were processed from MIDI file: {midi_path}. Ensure the file contains drum notes and is long enough for at least one bar.")
                 
                 for bar in processed_bars:
                     if bar.shape != (1, 128, 16) or type(bar) is not torch.Tensor:
+                        print(f"Warning: Processed bar tensor has unexpected shape: {bar.shape}. Expected shape is (1, 128, 16). Skipping this bar.")
                         raise ValueError(f"Processed bar tensor has unexpected shape: {bar.shape}. Expected shape is (1, 128, 16).")
                     info['bar'] = bar.to(self.device)
                     self.dataset.append(info)
-                    
+            
             except Exception as e:
                 self.invalid_dataset.append((info, str(e)))
                         
-        print(f"Processing & Validation complete. {len(self.dataset)} valid MIDI files, {len(self.invalid_dataset)} invalid MIDI files.")
+        print(f"Processing & Validation complete. {len(self.dataset)} valid MIDI Bars converted to tensors, {len(self.invalid_dataset)} invalid MIDI files.")
 
 
     def process_midi_to_tensor_list(self, midi_path, info, stride=16):
@@ -129,7 +140,7 @@ class DrumDataset(Dataset):
         target_dir = self.pt_train if target_split == 'train' else self.pt_eval
         stem = Path(item['path']).stem
         source_tag = item['source']
-        genre_tag = item['genre'].replace(' ', '_')
+        genre_tag = item['genre'].replace(' ', '-').lower()
 
         for index, bar in enumerate(bars):
             bar_path = os.path.join(target_dir, f'{source_tag}_{genre_tag}_{stem}_bar{index}.pt')
@@ -137,8 +148,8 @@ class DrumDataset(Dataset):
                 'bar': bar,
                 'bar_path': bar_path,
                 'src_midi_file': item['path'],
-                'source': item['source'],
-                'genre': item['genre'],
+                'source': source_tag,
+                'genre': genre_tag,
                 'bpm': item['bpm'],
                 'time_signature': item['time_signature'],
             }, bar_path)
